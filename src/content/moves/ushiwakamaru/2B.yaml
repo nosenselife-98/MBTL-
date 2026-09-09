@@ -1,0 +1,11 @@
+character: ushiwakamaru
+name: 2B
+input: 2B
+startup: 7
+active: 3
+recovery: 12
+onBlock: -3
+onHit: 3
+damage: 500
+attribute: 下段
+notes: しゃがみ中段崩し用の下段技(仮の値・要確認)。コンボの起点にもなる想定。

@@ -1,0 +1,11 @@
+character: ushiwakamaru
+name: 5A
+input: 5A
+startup: 5
+active: 3
+recovery: 8
+onBlock: -2
+onHit: 2
+damage: 300
+attribute: 中段
+notes: 発生の早い牽制技(仮の値・要確認)。連打キャンセルが利く想定。
