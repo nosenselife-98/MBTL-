@@ -1,0 +1,2284 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title id="pageTitle">MBTL対戦ダッシュボード | アルクェイド vs シエル</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="data/shiki-data.js"></script>
+<script src="data/arcueid-data.js"></script>
+<script src="data/ciel-data.js"></script>
+<script src="data/akiha-data.js"></script>
+<script src="data/hisui-data.js"></script>
+<script src="data/kohaku-data.js"></script>
+<script src="data/maid-data.js"></script>
+<script src="data/kouma-data.js"></script>
+<script src="data/miyako-data.js"></script>
+<script src="data/noel-data.js"></script>
+<script src="data/roa-data.js"></script>
+<script src="data/vlov-data.js"></script>
+<script src="data/warc-data.js"></script>
+<script src="data/saber-data.js"></script>
+<script src="data/aoko-data.js"></script>
+<script src="data/dan-data.js"></script>
+<script src="data/mario-data.js"></script>
+<script src="data/pciel-data.js"></script>
+<script src="data/neco-data.js"></script>
+<script src="data/mash-data.js"></script>
+<script src="data/ushiwaka-data.js"></script>
+<script src="data/monte-data.js"></script>
+<script src="data/tactics-data.js"></script>
+<script src="data/hitbox-data.js"></script>
+<script>
+  tailwind.config = {
+    theme: {
+      extend: {
+        colors: {
+          shiki: {
+            50: '#ecfeff', 300: '#67e8f9', 400: '#22d3ee',
+            500: '#06b6d4', 600: '#0891b2', 900: '#083344'
+          },
+          aruku: {
+            50: '#fdf2f8', 300: '#fda4af', 400: '#fb7185',
+            500: '#e11d48', 600: '#be123c', 900: '#4c0519'
+          }
+        },
+        boxShadow: {
+          'glow-cyan': '0 0 25px -5px rgba(34,211,238,0.5)',
+          'glow-rose': '0 0 25px -5px rgba(251,113,133,0.5)'
+        },
+        keyframes: {
+          pulseWarn: {
+            '0%, 100%': { boxShadow: '0 0 0 0 rgba(248,113,113,0.55)' },
+            '50%': { boxShadow: '0 0 0 6px rgba(248,113,113,0)' }
+          }
+        },
+        animation: {
+          pulseWarn: 'pulseWarn 1.4s ease-out infinite'
+        }
+      }
+    }
+  }
+</script>
+<style>
+  body { font-family: "Yu Gothic", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif; }
+  .hp-fill { transition: width 1.1s cubic-bezier(0.22, 1, 0.36, 1); }
+  .frame-table th, .frame-table td { white-space: nowrap; }
+  .frame-table td.notes-cell { white-space: normal; word-break: break-word; overflow-wrap: break-word; }
+  ::-webkit-scrollbar { height: 8px; width: 8px; }
+  ::-webkit-scrollbar-thumb { background: #3f3f46; border-radius: 9999px; }
+  ::-webkit-scrollbar-track { background: transparent; }
+  .highlight-mode .punish-badge { animation: pulseWarn 1.4s ease-out infinite; }
+
+  /* ==========================================================================
+     Tactics notes: per-move "💡対策あり" badge, click-to-expand accordion row,
+     and the "📖 対策メモ" character drawer.
+     ========================================================================== */
+  /* Calm, always-on glow — no blink/pulse animation, so it reads as neutral
+     information rather than a warning. */
+  .tactics-note-badge {
+    display: inline-flex; align-items: center; margin-left: .25rem;
+    padding: .125rem .5rem; border-radius: 9999px; font-size: 10px; font-weight: 500;
+    color: #fcd34d; background: rgba(245, 158, 11, .1); border: 1px solid rgba(245, 158, 11, .3);
+  }
+  tr.row.is-expanded { background: rgba(255,255,255,0.03); }
+
+  /* Tactics accordion card (only ever built for moves that have a note). */
+  .tactics-accordion-card { opacity: 0; transition: opacity .25s ease-out; }
+  .tactics-accordion-close {
+    flex-shrink: 0; font-size: 10px; font-weight: 700; color: #a3a3a3;
+    padding: .1rem .4rem; border-radius: .3rem; transition: color .15s ease, background .15s ease;
+  }
+  .tactics-accordion-close:hover { color: #e5e7eb; background: rgba(255,255,255,.08); }
+
+  .tactics-drawer-overlay {
+    position: fixed; inset: 0; z-index: 70;
+    visibility: hidden; pointer-events: none;
+  }
+  .tactics-drawer-overlay.is-open { visibility: visible; pointer-events: auto; }
+  .tactics-drawer-backdrop {
+    position: absolute; inset: 0; background: rgba(2,4,12,0); transition: background .25s ease-out;
+  }
+  .tactics-drawer-overlay.is-open .tactics-drawer-backdrop { background: rgba(2,4,12,.65); }
+  .tactics-drawer {
+    position: absolute; top: 0; right: 0; height: 100%; width: min(440px, 92vw);
+    background: linear-gradient(180deg, #101319 0%, #0a0c10 100%);
+    border-left: 1px solid rgba(255,255,255,.08);
+    box-shadow: -24px 0 60px rgba(0,0,0,.55);
+    display: flex; flex-direction: column;
+    transform: translateX(100%);
+    transition: transform .3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tactics-drawer-overlay.is-open .tactics-drawer { transform: translateX(0); }
+  .tactics-keypoint-list { display: flex; flex-direction: column; gap: .5rem; }
+  .tactics-keypoint {
+    display: flex; flex-direction: column; gap: .15rem;
+    padding: .55rem .7rem; border-radius: .5rem;
+    background: rgba(255,255,255,.04); border: 1px solid rgba(255,255,255,.08);
+  }
+
+  /* Center-VS perspective toggle (both desktop and mobile copies share this). */
+  .view-toggle-btn {
+    display: inline-flex; align-items: center; gap: .3rem;
+    font-size: 10px; font-weight: 800; letter-spacing: .05em;
+    padding: .2rem .55rem; border-radius: 9999px; pointer-events: auto;
+    color: #e5e7eb; background: rgba(255,255,255,.06); border: 1px solid rgba(255,255,255,.18);
+    transition: background .15s ease, transform .15s ease;
+  }
+  .view-toggle-btn:hover { background: rgba(255,255,255,.14); }
+  .view-toggle-btn:active { transform: scale(.94); }
+  .view-toggle-btn .view-toggle-icon { display: inline-block; transition: transform .25s ease; }
+  .view-toggle-btn.is-flipped .view-toggle-icon { transform: rotate(180deg); }
+
+  .diagonal-vs::before {
+    content: "";
+    position: absolute; inset: -40px -1px;
+    background: linear-gradient(180deg, #06b6d4 0%, #18181b 45%, #18181b 55%, #e11d48 100%);
+    clip-path: polygon(40% 0, 60% 0, 60% 100%, 40% 100%);
+    opacity: .9;
+  }
+  .portrait-frame img { filter: drop-shadow(0 10px 14px rgba(0,0,0,0.55)); }
+
+  /* ==========================================================================
+     Full-screen Character Select screen (#charSelectScreen)
+     ========================================================================== */
+  #charSelectScreen {
+    background:
+      radial-gradient(ellipse 120% 90% at 50% 28%, rgba(56,140,255,0.30), transparent 60%),
+      linear-gradient(160deg, #04081c 0%, #0a1a4a 32%, #1a1350 58%, #3a0a55 84%, #1a0630 100%);
+  }
+  /* Wireframe cyber grid, sitting under all real content (::before paints first). */
+  #charSelectScreen::before {
+    content: "";
+    position: absolute; inset: 0; z-index: 0; pointer-events: none;
+    background-image:
+      repeating-linear-gradient(to right, rgba(150,215,255,0.10) 0, rgba(150,215,255,0.10) 1px, transparent 1px, transparent 38px),
+      repeating-linear-gradient(to bottom, rgba(150,215,255,0.10) 0, rgba(150,215,255,0.10) 1px, transparent 1px, transparent 38px);
+    -webkit-mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 45%, transparent 92%);
+            mask-image: radial-gradient(ellipse 90% 80% at 50% 40%, #000 45%, transparent 92%);
+  }
+  /* CRT scanline overlay, sitting above everything (::after paints last) so the
+     whole screen reads like it's on a monitor, without hurting legibility. */
+  #charSelectScreen::after {
+    content: "";
+    position: absolute; inset: 0; z-index: 5; pointer-events: none;
+    background-image: repeating-linear-gradient(to bottom, rgba(0,0,0,0.24) 0, rgba(0,0,0,0.24) 1px, transparent 1px, transparent 3px);
+    opacity: .35;
+  }
+  .cs-glow { position: absolute; border-radius: 999px; filter: blur(90px); pointer-events: none; z-index: 0; }
+  .cs-glow-left  { left: -12%; top: 18%; width: 46vw; height: 46vw; background: rgba(34,211,238,0.22); }
+  .cs-glow-right { right: -12%; top: 18%; width: 46vw; height: 46vw; background: rgba(225,29,72,0.26); }
+
+  /* Logo + "CHARACTER SELECT" subtitle, stacked into one title-screen-style block */
+  .cs-title-block {
+    position: absolute; top: 1.5%; left: 50%; transform: translateX(-50%);
+    z-index: 3; display: flex; flex-direction: column; align-items: center; gap: 4px;
+    pointer-events: none;
+  }
+  .cs-title-logo {
+    display: block; width: clamp(160px, 15vw, 220px); height: auto;
+    filter: drop-shadow(0 0 14px rgba(125,211,252,.7)) drop-shadow(0 0 32px rgba(125,211,252,.35));
+  }
+  .cs-title {
+    font-family: Georgia, "Times New Roman", serif;
+    font-weight: 700;
+    font-size: clamp(13px, 1.7vw, 19px);
+    letter-spacing: .5em;
+    padding-left: .5em;
+    color: #eaf6ff;
+    text-shadow: 0 0 10px rgba(125,211,252,.9), 0 0 26px rgba(125,211,252,.6), 0 0 52px rgba(125,211,252,.3);
+    white-space: nowrap;
+  }
+
+  .cs-copyright {
+    position: absolute; bottom: 8px; right: 16px; z-index: 10; pointer-events: none;
+    font-size: 10px; color: rgba(255,255,255,0.35);
+  }
+
+  .cs-slot-picker {
+    position: absolute; top: 13%; left: 50%; transform: translateX(-50%);
+    display: flex; gap: .4rem; z-index: 3;
+    background: rgba(5,10,25,.55); border: 1px solid rgba(255,255,255,.15);
+    border-radius: 999px; padding: 4px;
+    backdrop-filter: blur(6px);
+  }
+  .cs-slot-btn {
+    padding: 6px 16px; border-radius: 999px; font-size: 11px; font-weight: 800;
+    letter-spacing: .05em; color: #9ca3af; transition: all .15s ease; white-space: nowrap;
+  }
+  .cs-slot-btn-p1.active { background: rgba(34,211,238,.92); color: #04222a; }
+  .cs-slot-btn-p2.active { background: rgba(251,113,133,.92); color: #2a0410; }
+
+  /* Giant side portraits: symmetric, 85vh tall, inset 5% from each edge */
+  .cs-portrait {
+    position: absolute; bottom: 0; height: 85vh;
+    width: 24vw; max-width: 420px; min-width: 170px;
+    display: flex; align-items: flex-end; justify-content: center;
+    pointer-events: none; z-index: 2;
+  }
+  .cs-portrait-p1 { left: 5%; }
+  .cs-portrait-p2 { right: 5%; }
+  .cs-portrait-img {
+    max-height: 100%; max-width: 100%;
+    object-fit: contain; object-position: bottom center;
+    filter: drop-shadow(0 24px 36px rgba(0,0,0,.65));
+    opacity: 0; transition: opacity .35s ease, transform .35s ease;
+    /* Per-character scale/position correction, set via JS from CHARACTERS[].zoom/x/y */
+    transform: scale(var(--p-scale, 1)) translate(var(--p-x, 0%), var(--p-y, 0%));
+  }
+  .cs-portrait-img.is-loaded { opacity: 1; }
+  .cs-portrait-p2 .cs-portrait-img { transform: scaleX(-1) scale(var(--p-scale, 1)) translate(var(--p-x, 0%), var(--p-y, 0%)); }
+  .cs-portrait-glow {
+    position: absolute; bottom: 3%; left: 50%; transform: translateX(-50%);
+    width: 12vw; height: 12vw; max-width: 190px; max-height: 190px;
+    border-radius: 999px; filter: blur(2px); z-index: -1;
+  }
+  .cs-portrait-p1 .cs-portrait-glow { background: radial-gradient(circle, rgba(34,211,238,.55), transparent 70%); box-shadow: 0 0 60px 12px rgba(34,211,238,.35); }
+  .cs-portrait-p2 .cs-portrait-glow { background: radial-gradient(circle, rgba(251,113,133,.55), transparent 70%); box-shadow: 0 0 60px 12px rgba(251,113,133,.35); }
+
+  /* Magic-circle floor rings under each portrait's feet: 3 flattened, perspective
+     ellipses layered under the soft glow so it reads as a summoning circle. */
+  .cs-portrait-ring {
+    position: absolute; left: 50%; top: 50%;
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .cs-portrait-ring-1 { width: 230%; height: 62%; border: 1px solid; }
+  .cs-portrait-ring-2 { width: 175%; height: 46%; border: 1.5px dashed; animation: csRingSpin 16s linear infinite; }
+  .cs-portrait-ring-3 { width: 130%; height: 32%; border: 1px solid; }
+  .cs-portrait-p1 .cs-portrait-ring-1 { border-color: rgba(34,211,238,.20); }
+  .cs-portrait-p1 .cs-portrait-ring-2 { border-color: rgba(34,211,238,.38); box-shadow: 0 0 14px rgba(34,211,238,.4); }
+  .cs-portrait-p1 .cs-portrait-ring-3 { border-color: rgba(34,211,238,.55); box-shadow: 0 0 16px rgba(34,211,238,.5); }
+  .cs-portrait-p2 .cs-portrait-ring-1 { border-color: rgba(251,113,133,.20); }
+  .cs-portrait-p2 .cs-portrait-ring-2 { border-color: rgba(251,113,133,.38); box-shadow: 0 0 14px rgba(251,113,133,.4); }
+  .cs-portrait-p2 .cs-portrait-ring-3 { border-color: rgba(251,113,133,.55); box-shadow: 0 0 16px rgba(251,113,133,.5); }
+  @keyframes csRingSpin {
+    from { transform: translate(-50%, -50%) rotate(0deg); }
+    to   { transform: translate(-50%, -50%) rotate(360deg); }
+  }
+  .cs-portrait-label { position: absolute; bottom: 4%; width: 88%; }
+  .cs-portrait-p1 .cs-portrait-label { left: 8%; text-align: left; }
+  .cs-portrait-p2 .cs-portrait-label { right: 8%; text-align: right; }
+  .cs-portrait-tag { display: block; font-size: 10px; letter-spacing: .35em; font-weight: 800; }
+  .cs-portrait-p1 .cs-portrait-tag { color: #67e8f9; }
+  .cs-portrait-p2 .cs-portrait-tag { color: #fda4af; }
+  .cs-portrait-name {
+    font-size: clamp(18px, 2.4vw, 30px); font-weight: 900; color: #fff;
+    text-shadow: 0 2px 12px rgba(0,0,0,.85); line-height: 1.15;
+    /* 中黒(・)や空白など自然な区切り以外では単語(文字塊)の途中で折り返さない。
+       それでも枠に収まらない場合のみ overflow-wrap が最後の手段として折り返す。 */
+    word-break: keep-all; overflow-wrap: break-word;
+  }
+  /* 非常に長い名前(例: ミハイル・ロア・バルダムヨォン)は明示的な<br>改行と合わせて縮小表示する */
+  .cs-portrait-name.is-long-name { font-size: clamp(14px, 1.9vw, 23px); }
+  .cs-portrait-name-en { font-size: 10px; letter-spacing: .12em; color: #cbd5e1; text-transform: uppercase; }
+
+  /* Center-bottom "TIME ∞" HUD, just under the character tiles. */
+  .cs-hud-time {
+    position: absolute; bottom: 24%; left: 50%; transform: translateX(-50%);
+    z-index: 3; pointer-events: none;
+    display: flex; flex-direction: column; align-items: center; gap: 4px;
+  }
+  .cs-hud-time-label {
+    font-size: 10px; letter-spacing: .5em; padding-left: .5em; font-weight: 800;
+    color: #ffd6f0; text-shadow: 0 0 8px rgba(255,90,200,.85);
+  }
+  .cs-hud-time-frame {
+    position: relative;
+    width: clamp(60px, 7.5vw, 104px); height: clamp(60px, 7.5vw, 104px);
+    display: flex; align-items: center; justify-content: center;
+    margin-top: 4px;
+  }
+  .cs-hud-time-frame::before,
+  .cs-hud-time-frame::after {
+    content: ""; position: absolute;
+    transform: rotate(45deg);
+  }
+  .cs-hud-time-frame::before {
+    inset: 4px;
+    border: 1.5px solid rgba(255,110,200,.5);
+    box-shadow: 0 0 16px rgba(255,60,180,.4), inset 0 0 16px rgba(255,60,180,.25);
+  }
+  .cs-hud-time-frame::after {
+    inset: 15px;
+    border: 1px solid rgba(255,180,225,.35);
+  }
+  .cs-hud-time-value {
+    position: relative; z-index: 1;
+    font-size: clamp(1.9rem, 3.4vw, 4rem); font-weight: 900; line-height: 1;
+    color: #ff7fdc;
+    text-shadow: 0 0 10px #ff2fb0, 0 0 26px #ff2fb0, 0 0 50px rgba(255,47,176,.55);
+  }
+  @media (max-width: 640px) {
+    .cs-hud-time { display: none; }
+  }
+
+  @media (max-width: 900px) {
+    .cs-portrait { display: none; }
+  }
+
+  /* Center character grid: capped width so it never collides with the giant portraits */
+  .cs-grid-wrap {
+    position: absolute; top: 34%; left: 50%; transform: translate(-50%, -50%);
+    z-index: 3; display: flex; flex-direction: column; align-items: center;
+    max-width: min(94vw, 880px);
+  }
+  .cs-rows { display: flex; flex-direction: column; align-items: center; }
+  .cs-row { display: flex; flex-wrap: nowrap; justify-content: center; gap: 6px; }
+  /* Positive gap (not a negative overlap margin) so the V-offset dip of one row's
+     center tiles never overlaps the next row's hexagons and causes mis-clicks. */
+  .cs-row + .cs-row { margin-top: 2px; }
+  @media (min-width: 640px) {
+    .cs-row + .cs-row { margin-top: 3px; }
+  }
+  @media (min-width: 1024px) {
+    .cs-row + .cs-row { margin-top: 4px; }
+  }
+
+  /* ---- Hexagonal (corner-clipped) select tiles ----
+     Outer <button> stays a plain box (position context only, no clipping) so the
+     SVG cursor glow can bleed outside the hex silhouette. The hex cut itself is
+     applied to .cs-tile-clip, which houses the portrait image / label / badges. */
+  .cs-tile {
+    position: relative;
+    width: 3.1rem;
+    aspect-ratio: 3 / 4;
+    flex: 0 0 auto;
+    cursor: pointer;
+    transition: transform .18s ease;
+    transform: translateY(var(--v-offset, 0px));
+  }
+  @media (min-width: 480px) { .cs-tile { width: 3.6rem; } }
+  @media (min-width: 640px) { .cs-tile { width: 4.1rem; } }
+  @media (min-width: 768px) { .cs-tile { width: 4.6rem; } }
+  @media (min-width: 1024px) { .cs-tile { width: 5.1rem; } }
+  .cs-tile:hover {
+    transform: translateY(calc(var(--v-offset, 0px) - 8px)) scale(1.08);
+    z-index: 15;
+  }
+  .cs-tile.is-p1, .cs-tile.is-p2 {
+    transform: translateY(calc(var(--v-offset, 0px) - 8px)) scale(1.08);
+    z-index: 12;
+  }
+
+  /* Left half: top-right/bottom-left corners cut. */
+  .cs-tile-clip {
+    position: absolute; inset: 0;
+    clip-path: polygon(85% 0, 0 0, 0 85%, 15% 100%, 100% 100%, 100% 15%);
+    background: #0c1024;
+    overflow: hidden;
+  }
+  /* Right half: mirrored so it's top-left/bottom-right cut instead, making the
+     whole honeycomb structure symmetric about the grid's center. */
+  .cs-tile.is-right-half .cs-tile-clip {
+    clip-path: polygon(15% 0, 100% 0, 100% 85%, 85% 100%, 0 100%, 0 15%);
+  }
+  .cs-tile-img-wrap { position: absolute; inset: 0; }
+  .cs-tile-img-wrap img {
+    position: absolute; inset: 0; width: 100%; height: 100%;
+    object-fit: cover; object-position: top center;
+    pointer-events: none; user-select: none;
+  }
+  .cs-tile-label {
+    position: absolute; inset-inline: 0; bottom: 0;
+    background: linear-gradient(to top, rgba(0,0,0,0.92), rgba(0,0,0,0.35) 70%, transparent);
+    color: #fff; font-weight: 700; text-align: center;
+    font-size: 8.5px; line-height: 1.15; padding: 5px 1px 3px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  @media (min-width: 640px) { .cs-tile-label { font-size: 10px; } }
+  .cs-tile-badge {
+    position: absolute; top: 2px; font-size: 8px; font-weight: 900;
+    padding: 1px 4px; border-radius: 2px; color: #0a0a0a; letter-spacing: .02em;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.6);
+  }
+  .cs-tile-badge.p1-badge { left: 2px; background: #22d3ee; }
+  .cs-tile-badge.p2-badge { right: 2px; background: #fb7185; }
+
+  /* Static hex outline + glowing hex cursor, both as unclipped SVG overlays so the
+     neon glow can extend past the hex silhouette (a box-shadow would be clipped). */
+  .cs-tile-outline, .cs-tile-cursor { position: absolute; inset: 0; overflow: visible; pointer-events: none; }
+  .cs-tile-outline-poly { fill: none; stroke: rgba(255,255,255,.28); stroke-width: 1.6; vector-effect: non-scaling-stroke; }
+  .cs-tile-cursor-poly {
+    fill: none; stroke-width: 3; vector-effect: non-scaling-stroke;
+    opacity: 0; transition: opacity .15s ease;
+  }
+  @keyframes csCursorPulse { 0%, 100% { filter: brightness(1); } 50% { filter: brightness(1.4); } }
+  .cs-tile.is-p1 .cs-tile-cursor-poly {
+    opacity: 1; stroke: #22ecff;
+    filter: drop-shadow(0 0 4px #22ecff) drop-shadow(0 0 11px #22ecff);
+    animation: csCursorPulse 1.3s ease-in-out infinite;
+  }
+  .cs-tile.is-p2 .cs-tile-cursor-poly {
+    opacity: 1; stroke: #ff4d6d;
+    filter: drop-shadow(0 0 4px #ff4d6d) drop-shadow(0 0 11px #ff4d6d);
+    animation: csCursorPulse 1.3s ease-in-out infinite;
+  }
+  .cs-tile.is-p1.is-p2 .cs-tile-cursor-poly {
+    stroke: #f8fafc;
+    filter: drop-shadow(0 0 4px #22ecff) drop-shadow(0 0 4px #ff4d6d) drop-shadow(0 0 12px #f8fafc);
+  }
+
+  /* Confirm panel */
+  .cs-confirm-panel {
+    position: absolute; bottom: 4%; left: 50%; transform: translateX(-50%);
+    z-index: 4; display: flex; flex-direction: column; align-items: center; gap: .55rem;
+    background: rgba(5,10,25,.78); border: 1px solid rgba(255,255,255,.2);
+    padding: 1rem clamp(1rem, 5vw, 2.4rem) 1.2rem;
+    max-width: 92vw;
+    /* Sci-fi panel: top-left and bottom-right corners sheared off. */
+    clip-path: polygon(16px 0, 100% 0, 100% calc(100% - 16px), calc(100% - 16px) 100%, 0 100%, 0 16px);
+    backdrop-filter: blur(8px); box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    animation: csConfirmIn .25s ease-out;
+  }
+  .cs-confirm-panel::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 2px;
+    background: linear-gradient(90deg, #22d3ee, #fb7185);
+  }
+  @keyframes csConfirmIn { from { opacity: 0; transform: translate(-50%, 12px) scale(.95); } to { opacity: 1; transform: translate(-50%, 0) scale(1); } }
+  .cs-confirm-text { font-size: 12px; color: #e5e7eb; font-weight: 700; letter-spacing: .05em; }
+  .cs-confirm-vs {
+    display: flex; align-items: center; justify-content: center; gap: .65rem;
+    font-weight: 900; font-size: clamp(12px, 2.6vw, 15px);
+    flex-wrap: wrap; row-gap: 2px;
+  }
+  .cs-confirm-vs .cs-confirm-name-p1 { color: #67e8f9; }
+  .cs-confirm-vs .cs-confirm-name-p2 { color: #fda4af; }
+  /* 決定パネル内では名前の途中で改行させない(端の1文字だけ折り返るのを防止)。
+     収まりきらない場合は上のflex-wrapでVS全体の行が折り返す形にする。 */
+  .cs-confirm-name-p1, .cs-confirm-name-p2 { white-space: nowrap; }
+  .cs-confirm-vs-mark { font-style: italic; color: #f8fafc; font-size: 11px; opacity: .7; }
+  .cs-confirm-btn {
+    margin-top: .1rem; padding: .55rem 2.6rem;
+    font-weight: 900; letter-spacing: .25em; font-size: 13px;
+    border-radius: .4rem; color: #fff;
+    background: linear-gradient(90deg, #06b6d4, #e11d48);
+    box-shadow: 0 0 20px rgba(255,255,255,.25);
+    transition: transform .15s ease, box-shadow .15s ease;
+  }
+  .cs-confirm-btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 0 30px rgba(255,255,255,.4); }
+
+  /* ==========================================================================
+     "Mystic Eyes of Death Perception" 3-phase shatter transition
+     Phase 1: white-blue slicing lines flash across the screen (dimmed backdrop)
+     Phase 2: the lines instantly turn lethal red
+     Phase 3: the convex cells those lines carve out fly apart, gravity ignored
+     ========================================================================== */
+  #shatterOverlay { position: fixed; inset: 0; z-index: 60; pointer-events: none; }
+
+  .shatter-dim { position: fixed; inset: 0; z-index: 2; background: rgba(0,0,0,0); transition: background .12s ease-out; }
+  .shatter-dim.active { background: rgba(2,4,12,0.6); }
+
+  .shatter-lines-svg { position: fixed; inset: 0; width: 100%; height: 100%; z-index: 3; transition: opacity .5s ease; }
+  .shatter-lines-svg.fade-out { opacity: 0; }
+  .shatter-line {
+    fill: none; stroke: #eaffff; stroke-width: 2.2; stroke-linecap: round;
+    filter: drop-shadow(0 0 5px #bff6ff) drop-shadow(0 0 14px #7fd7ff);
+    /* stroke-dashoffset is what makes each cut "draw in" — .035s is close to
+       a single flash-frame, so it reads as a knife slash rather than a line
+       being slowly traced. JS staggers when each line's offset gets set to
+       0 so the nine cuts still land one at a time, in rhythm. */
+    transition: stroke-dashoffset .035s linear, stroke .06s ease-out, filter .06s ease-out;
+  }
+  .shatter-lines-svg.is-death .shatter-line {
+    stroke: #ff0033;
+    filter: drop-shadow(0 0 6px #ff0033) drop-shadow(0 0 20px #ff2b4d);
+    /* Brief over-bright flash on the instant of death, settling back to the
+       steady red glow declared above (default fill-mode reverts to it). */
+    animation: shatterLineDeathPulse .3s ease-out;
+  }
+  @keyframes shatterLineDeathPulse {
+    0%   { filter: drop-shadow(0 0 2px #fff) drop-shadow(0 0 40px #ff0033) brightness(2.2); }
+    100% { filter: drop-shadow(0 0 6px #ff0033) drop-shadow(0 0 20px #ff2b4d) brightness(1); }
+  }
+
+  /* perspective on the shared wrapper gives every shard a common 3D vanishing
+     point, so rotateX/rotateY below reads as "tumbling toward/away from the
+     camera" instead of a flat spin. It also makes .shatter-pieces the
+     containing block for its position:fixed children (still inset:0 to the
+     viewport, so initial layout is unchanged). */
+  .shatter-pieces { position: fixed; inset: 0; z-index: 1; perspective: 1200px; transform-style: preserve-3d; }
+  .shatter-piece {
+    position: fixed; inset: 0; overflow: hidden;
+    transform-style: preserve-3d;
+    backface-visibility: hidden;
+    will-change: transform, opacity, filter;
+    pointer-events: none;
+    /* Glass cross-section: a bright edge + faint rose inner glow, clipped by
+       the piece's own clip-path so it traces exactly along each cut line. */
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,.4), inset 0 0 16px rgba(255,110,140,.25);
+  }
+  .shatter-piece > * { pointer-events: none !important; }
+
+  /* Step A "パリン" — pieces pop apart just 8-16px in place (plus a per-piece
+     brightness tweak) so the break itself registers before anything flies.
+     --crack-delay keeps this a tight, near-simultaneous burst. */
+  .shatter-piece.crack-open {
+    transition: transform .15s cubic-bezier(0.16, 1, 0.3, 1) var(--crack-delay, 0s), filter .1s ease-out;
+    transform: translate3d(var(--crack-x, 0), var(--crack-y, 0), var(--crack-z, 0));
+    filter: brightness(var(--crack-brightness, 1));
+  }
+
+  /* Step B "崩落" — gravity takes over and the shards crash straight down,
+     accelerating rather than decelerating (cubic-bezier starts flat, ends
+     steep) for a "ストン" drop instead of a soft glide. --fall-delay staggers
+     each piece 0-140ms by its height so the 17 pieces come down as a
+     cascading collapse, not all at the same instant. */
+  .shatter-piece.fly {
+    transition: transform .95s cubic-bezier(0.4, 0, 0.8, 1) var(--fall-delay, 0s), opacity .75s ease-in .2s, filter .1s ease-out;
+    transform:
+      translate3d(var(--fly-x, 0), var(--fly-y, 0), var(--fly-z, 0))
+      rotateX(var(--rot-x, 0deg)) rotateY(var(--rot-y, 0deg)) rotateZ(var(--rot-z, 0deg));
+    opacity: 0;
+    filter: brightness(var(--crack-brightness, 1));
+  }
+
+  /* Blood spray: a transient <canvas> (particles) + a quick red strobe,
+     both fired the instant the cut turns lethal and the shards let go. */
+  .shatter-blood-canvas { position: fixed; inset: 0; z-index: 4; pointer-events: none; }
+  .shatter-blood-flash {
+    position: fixed; inset: 0; z-index: 4; opacity: 0; pointer-events: none;
+    background: radial-gradient(ellipse 65% 55% at 50% 45%,
+      rgba(255, 10, 50, .9) 0%, rgba(139, 0, 0, .5) 45%, rgba(139, 0, 0, 0) 78%);
+  }
+  .shatter-blood-flash.flash { animation: shatterBloodPulse .3s ease-out; }
+  @keyframes shatterBloodPulse {
+    0%   { opacity: 0; }
+    30%  { opacity: .85; }
+    100% { opacity: 0; }
+  }
+
+  #dashboardScreen.hidden { display: none; }
+
+  /* ==========================================================================
+     Dashboard "VERSUS" entrance — plays once the shatter transition hands off
+     to #dashboardScreen (and every time it hands off again, since the panels
+     stick around and only their entrance classes get replayed).
+     ========================================================================== */
+
+  /* Soft light-burst punched in right at the tail of Phase 3, so the cut from
+     the flying shards to the dashboard reads as an impact instead of a pop.
+     A capped-opacity, theme-tinted radial glow (centered where the VS badge
+     is about to land) rather than a full-screen white flash — enough to sell
+     the hit without a harsh, photosensitivity-unfriendly whiteout. */
+  #shatterFlash {
+    position: fixed; inset: 0; z-index: 5; opacity: 0; pointer-events: none;
+    background: radial-gradient(ellipse 70% 55% at 50% 16%,
+      rgba(224, 250, 255, 0.95) 0%, rgba(103, 232, 249, 0.5) 45%, rgba(34, 211, 238, 0) 78%);
+  }
+  #shatterFlash.flash { animation: shatterFlashPulse .22s ease-out; }
+  @keyframes shatterFlashPulse {
+    0%   { opacity: 0; }
+    45%  { opacity: .55; }
+    100% { opacity: 0; }
+  }
+
+  /* 1P/2P panels: slide-and-fade in from their respective outer sides. */
+  #p1Panel, #p2Panel {
+    transition: transform .35s cubic-bezier(0.16, 1, 0.3, 1), opacity .35s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  #p1Panel.panel-pre-enter { transform: translateX(-60px); opacity: 0; }
+  #p2Panel.panel-pre-enter { transform: translateX(60px); opacity: 0; }
+
+  /* Center VS badge (desktop): drops in from a huge zoom and slams to size 1,
+     bursting its cyan glow the instant it lands. */
+  #vsBadgeDesktop {
+    transition: transform .3s cubic-bezier(0.34, 1.56, 0.64, 1), opacity .3s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+  #vsBadgeDesktop.vs-pre-enter { transform: scale(2.2); opacity: 0; }
+  #vsBadgeDesktop.vs-slam { animation: vsBadgeGlowBurst .5s ease-out; }
+  @keyframes vsBadgeGlowBurst {
+    0%   { box-shadow: 0 0 0 0 rgba(34,211,238,0); }
+    30%  { box-shadow: 0 0 60px 18px rgba(34,211,238,.9); }
+    100% { box-shadow: 0 0 25px -5px rgba(34,211,238,.5); }
+  }
+</style>
+</head>
+<body class="bg-neutral-950 text-neutral-100 min-h-screen">
+
+  <!-- ============================================================
+       FULL-SCREEN CHARACTER SELECT SCREEN
+       ============================================================ -->
+  <div id="charSelectScreen" class="fixed inset-0 z-50 overflow-hidden select-none">
+    <div class="cs-glow cs-glow-left"></div>
+    <div class="cs-glow cs-glow-right"></div>
+
+    <div class="cs-title-block">
+      <img src="images/logo/meltyblood_typelumina_logo02_neg.png" alt="MELTY BLOOD: TYPE LUMINA" class="cs-title-logo">
+      <div class="cs-title">CHARACTER SELECT</div>
+    </div>
+
+    <div class="cs-slot-picker">
+      <button type="button" id="csPickP1Btn" class="cs-slot-btn cs-slot-btn-p1">1P選択中</button>
+      <button type="button" id="csPickP2Btn" class="cs-slot-btn cs-slot-btn-p2">2P選択中</button>
+    </div>
+
+    <!-- 1P giant portrait -->
+    <div class="cs-portrait cs-portrait-p1">
+      <div class="cs-portrait-glow">
+        <span class="cs-portrait-ring cs-portrait-ring-1"></span>
+        <span class="cs-portrait-ring cs-portrait-ring-2"></span>
+        <span class="cs-portrait-ring cs-portrait-ring-3"></span>
+      </div>
+      <img id="csP1PortraitImg" class="cs-portrait-img" src="" alt="">
+      <div class="cs-portrait-label">
+        <span class="cs-portrait-tag">PLAYER 1</span>
+        <div id="csP1NameJa" class="cs-portrait-name"></div>
+        <div id="csP1NameEn" class="cs-portrait-name-en"></div>
+      </div>
+    </div>
+
+    <!-- 2P giant portrait (mirrored) -->
+    <div class="cs-portrait cs-portrait-p2">
+      <div class="cs-portrait-glow">
+        <span class="cs-portrait-ring cs-portrait-ring-1"></span>
+        <span class="cs-portrait-ring cs-portrait-ring-2"></span>
+        <span class="cs-portrait-ring cs-portrait-ring-3"></span>
+      </div>
+      <img id="csP2PortraitImg" class="cs-portrait-img" src="" alt="">
+      <div class="cs-portrait-label">
+        <span class="cs-portrait-tag">PLAYER 2</span>
+        <div id="csP2NameJa" class="cs-portrait-name"></div>
+        <div id="csP2NameEn" class="cs-portrait-name-en"></div>
+      </div>
+    </div>
+
+    <div class="cs-grid-wrap">
+      <div id="csCharGrid" class="cs-rows"></div>
+    </div>
+
+    <!-- Center HUD: TIME ∞, in the gap between the two factions -->
+    <div class="cs-hud-time">
+      <span class="cs-hud-time-label">TIME</span>
+      <div class="cs-hud-time-frame">
+        <span class="cs-hud-time-value">∞</span>
+      </div>
+    </div>
+
+    <div id="csConfirmPanel" class="cs-confirm-panel hidden">
+      <p class="cs-confirm-text">この2キャラを検証しますか？</p>
+      <div class="cs-confirm-vs">
+        <span id="csConfirmP1Name" class="cs-confirm-name-p1"></span>
+        <span class="cs-confirm-vs-mark">VS</span>
+        <span id="csConfirmP2Name" class="cs-confirm-name-p2"></span>
+      </div>
+      <button type="button" id="csConfirmBtn" class="cs-confirm-btn">決定</button>
+    </div>
+
+    <div class="cs-copyright">© TYPE-MOON / Project LUMINA / FRENCH-BREAD</div>
+  </div>
+
+  <!-- ============================================================
+       DASHBOARD SCREEN
+       ============================================================ -->
+  <div id="dashboardScreen" class="hidden">
+
+    <!-- Header -->
+    <header class="border-b border-neutral-800 bg-neutral-950/90 backdrop-blur sticky top-0 z-30">
+      <div class="max-w-7xl mx-auto px-4 py-3 flex flex-col md:flex-row md:items-center gap-3 md:gap-6">
+        <div class="flex items-center gap-3">
+          <img src="images/logo/meltyblood_typelumina_logo02_neg.png" alt="MELTY BLOOD: TYPE LUMINA"
+               class="h-8 sm:h-9 w-auto shrink-0">
+          <p id="headerSubtitle" class="text-xs text-neutral-400 leading-tight">対戦特化型ダッシュボード — アルクェイド vs シエル</p>
+        </div>
+
+        <div class="flex-1 flex flex-col sm:flex-row gap-2 md:justify-end">
+          <button id="backToSelectBtn"
+                  class="whitespace-nowrap text-sm font-semibold px-3 py-1.5 rounded-md border border-neutral-600 bg-neutral-800/60 text-neutral-200 hover:bg-neutral-700 transition flex items-center justify-center gap-1.5">
+            <span aria-hidden="true">◀</span>キャラクター選択へ戻る
+          </button>
+          <div class="relative w-full sm:w-64">
+            <input id="searchInput" type="text" placeholder="技コマンドで検索 (例: 5A, 22B)"
+                   class="w-full bg-neutral-900 border border-neutral-700 rounded-md pl-8 pr-3 py-1.5 text-sm placeholder-neutral-500 focus:outline-none focus:ring-2 focus:ring-shiki-500/60">
+            <span class="absolute left-2.5 top-1/2 -translate-y-1/2 text-neutral-500 text-sm">🔎</span>
+          </div>
+          <button id="toggleHighlight"
+                  class="whitespace-nowrap text-sm font-semibold px-3 py-1.5 rounded-md border border-red-500/50 bg-red-500/10 text-red-300 hover:bg-red-500/20 transition">
+            ⚠ 確反ハイライト: <span id="highlightState">OFF</span>
+          </button>
+        </div>
+      </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 py-6">
+
+      <!-- Dual dashboard -->
+      <section class="relative grid grid-cols-1 lg:grid-cols-2 gap-6 lg:gap-0">
+
+        <!-- Center VS (desktop) -->
+        <div class="hidden lg:flex absolute left-1/2 top-10 -translate-x-1/2 z-20 flex-col items-center gap-2 pointer-events-none">
+          <div id="vsBadgeDesktop" class="w-16 h-16 rounded-full bg-neutral-950 border-4 border-neutral-800 flex items-center justify-center shadow-glow-cyan">
+            <span class="inline-block pr-1 font-black italic text-xl bg-gradient-to-br from-shiki-400 to-aruku-400 bg-clip-text text-transparent">VS</span>
+          </div>
+          <button type="button" id="viewToggleBtnDesktop" class="view-toggle-btn" title="1P/2Pの視点（YOU/RIVAL）を反転します">
+            <span class="view-toggle-icon">🔄</span>視点反転
+          </button>
+          <p class="w-40 text-center text-[9px] leading-tight text-neutral-500 pointer-events-none">
+            ※開幕スプライト優先度は1P所持<br>（同F投げは相手側抜け）
+          </p>
+        </div>
+
+        <!-- ============ 1P SIDE ============ -->
+        <article id="p1Panel" class="rounded-xl lg:rounded-r-none border border-shiki-500/30 bg-gradient-to-b from-shiki-900/30 to-neutral-950 overflow-hidden">
+          <div class="p-5 border-b border-shiki-500/20">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex-1 min-w-0">
+                <span class="text-xs font-bold tracking-widest text-shiki-400 bg-shiki-500/10 border border-shiki-500/30 px-2 py-0.5 rounded">1P SIDE</span><span id="p1RoleBadge" class="ml-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/40">YOU</span>
+                <p id="p1Type" class="mt-2 text-xs font-semibold text-neutral-400"></p>
+                <h2 id="p1Name" class="mt-1 text-3xl font-black text-white break-words"></h2>
+                <p id="p1NameEn" class="text-shiki-300 text-sm font-semibold tracking-wide"></p>
+              </div>
+              <div class="portrait-frame shrink-0 w-24 sm:w-28 md:w-32 h-32 sm:h-40 md:h-44 overflow-hidden flex items-end justify-center">
+                <img id="p1Portrait" src="" alt="" class="h-full w-auto max-w-none object-contain object-bottom select-none pointer-events-none">
+              </div>
+            </div>
+
+            <div class="mt-3">
+              <button type="button" id="p1TacticsBtn" class="text-xs font-semibold px-2.5 py-1 rounded-md border border-shiki-500/40 bg-shiki-500/10 text-shiki-200 hover:bg-shiki-500/20 transition">
+                📖 対策メモ
+              </button>
+            </div>
+
+            <!-- HP bar -->
+            <div class="mt-4 relative z-10">
+              <div class="flex justify-between text-xs text-neutral-400 mb-1">
+                <span>HEALTH</span>
+                <span id="p1HealthNum" class="font-mono text-shiki-300">-</span>
+              </div>
+              <div class="h-3 w-full bg-neutral-800 rounded-full overflow-hidden border border-neutral-700">
+                <div id="p1HpFill" class="hp-fill h-full rounded-full bg-gradient-to-r from-shiki-600 to-shiki-300" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Frame table -->
+          <div class="p-5">
+            <h3 class="text-sm font-bold text-shiki-300 mb-2 flex items-center gap-2">
+              <span class="w-1.5 h-4 bg-shiki-500 rounded-sm"></span>代表技フレームデータ
+            </h3>
+            <div class="overflow-x-auto rounded-lg border border-neutral-800">
+              <table class="frame-table w-full table-fixed text-xs sm:text-sm" data-side="p1">
+                <thead class="bg-neutral-900 text-neutral-400">
+                  <tr>
+                    <th class="text-left px-3 py-2 font-semibold w-[22%]">コマンド</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[14%]">発生</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[16%]">硬直差</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[14%]">属性</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[34%]">特記事項</th>
+                  </tr>
+                </thead>
+                <tbody id="p1Tbody" class="divide-y divide-neutral-800">
+                  <tr class="row">
+                    <td colspan="5" class="px-3 py-4 text-center text-neutral-500">読み込み中…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+
+        <!-- Center VS (mobile) -->
+        <div class="flex lg:hidden items-center gap-3 -my-2">
+          <div class="h-px flex-1 bg-gradient-to-r from-transparent to-shiki-500/60"></div>
+          <div class="flex flex-col items-center gap-1">
+            <span class="inline-block pr-1 font-black italic text-lg bg-gradient-to-br from-shiki-400 to-aruku-400 bg-clip-text text-transparent">VS</span>
+            <button type="button" id="viewToggleBtnMobile" class="view-toggle-btn" title="1P/2Pの視点（YOU/RIVAL）を反転します">
+              <span class="view-toggle-icon">🔄</span>視点反転
+            </button>
+          </div>
+          <div class="h-px flex-1 bg-gradient-to-l from-transparent to-aruku-500/60"></div>
+        </div>
+        <p class="flex lg:hidden -mt-1 justify-center text-center text-[9px] leading-tight text-neutral-500">
+          ※開幕スプライト優先度は1P所持（同F投げは相手側抜け）
+        </p>
+
+        <!-- ============ 2P SIDE ============ -->
+        <article id="p2Panel" class="rounded-xl lg:rounded-l-none border border-aruku-500/30 bg-gradient-to-b from-aruku-900/30 to-neutral-950 overflow-hidden">
+          <div class="p-5 border-b border-aruku-500/20">
+            <div class="flex items-start justify-between gap-3">
+              <div class="portrait-frame shrink-0 w-24 sm:w-28 md:w-32 h-32 sm:h-40 md:h-44 overflow-hidden flex items-end justify-center">
+                <img id="p2Portrait" src="" alt="" class="-scale-x-100 h-full w-auto max-w-none object-contain object-bottom select-none pointer-events-none">
+              </div>
+              <div class="flex-1 min-w-0 text-right">
+                <span id="p2RoleBadge" class="mr-1.5 inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider bg-red-500/15 text-red-300 border border-red-500/40">RIVAL</span><span class="text-xs font-bold tracking-widest text-aruku-400 bg-aruku-500/10 border border-aruku-500/30 px-2 py-0.5 rounded">2P SIDE</span>
+                <p id="p2Type" class="mt-2 text-xs font-semibold text-neutral-400"></p>
+                <h2 id="p2Name" class="mt-1 text-3xl font-black text-white break-words"></h2>
+                <p id="p2NameEn" class="text-aruku-300 text-sm font-semibold tracking-wide"></p>
+              </div>
+            </div>
+
+            <div class="mt-3 flex justify-end">
+              <button type="button" id="p2TacticsBtn" class="text-xs font-semibold px-2.5 py-1 rounded-md border border-aruku-500/40 bg-aruku-500/10 text-aruku-200 hover:bg-aruku-500/20 transition">
+                📖 対策メモ
+              </button>
+            </div>
+
+            <!-- HP bar -->
+            <div class="mt-4 relative z-10">
+              <div class="flex justify-between text-xs text-neutral-400 mb-1">
+                <span id="p2HealthNum" class="font-mono text-aruku-300">-</span>
+                <span>HEALTH</span>
+              </div>
+              <div class="h-3 w-full bg-neutral-800 rounded-full overflow-hidden border border-neutral-700">
+                <div id="p2HpFill" class="hp-fill h-full rounded-full bg-gradient-to-l from-aruku-600 to-aruku-300 ml-auto" style="width:0%"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Frame table -->
+          <div class="p-5">
+            <h3 class="text-sm font-bold text-aruku-300 mb-2 flex items-center gap-2 justify-end">
+              代表技フレームデータ<span class="w-1.5 h-4 bg-aruku-500 rounded-sm"></span>
+            </h3>
+            <div class="overflow-x-auto rounded-lg border border-neutral-800">
+              <table class="frame-table w-full table-fixed text-xs sm:text-sm" data-side="p2">
+                <thead class="bg-neutral-900 text-neutral-400">
+                  <tr>
+                    <th class="text-left px-3 py-2 font-semibold w-[22%]">コマンド</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[14%]">発生</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[16%]">硬直差</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[14%]">属性</th>
+                    <th class="text-left px-3 py-2 font-semibold w-[34%]">特記事項</th>
+                  </tr>
+                </thead>
+                <tbody id="p2Tbody" class="divide-y divide-neutral-800">
+                  <tr class="row">
+                    <td colspan="5" class="px-3 py-4 text-center text-neutral-500">読み込み中…</td>
+                  </tr>
+                </tbody>
+              </table>
+            </div>
+          </div>
+        </article>
+      </section>
+
+      <p class="mt-6 text-center text-xs text-neutral-500">© TYPE-MOON / Project LUMINA / FRENCH-BREAD</p>
+    </main>
+
+    <!-- ============================================================
+         対策メモ ドロワー（1P/2P共通・押された側のキャラで内容を切り替える）
+         ============================================================ -->
+    <div id="tacticsDrawerOverlay" class="tactics-drawer-overlay">
+      <div id="tacticsDrawerBackdrop" class="tactics-drawer-backdrop"></div>
+      <aside id="tacticsDrawer" class="tactics-drawer" role="dialog" aria-modal="true" aria-labelledby="tacticsDrawerName">
+        <div class="flex items-start justify-between gap-3 p-5 border-b border-neutral-800">
+          <div class="min-w-0">
+            <p class="text-[11px] font-bold tracking-widest text-neutral-500">📖 対策メモ</p>
+            <h3 id="tacticsDrawerName" class="text-xl font-black text-white truncate"></h3>
+          </div>
+          <button type="button" id="tacticsDrawerCloseBtn" aria-label="閉じる"
+                  class="shrink-0 w-8 h-8 rounded-md border border-neutral-700 bg-neutral-800/60 text-neutral-300 hover:bg-neutral-700 transition flex items-center justify-center">
+            ✕
+          </button>
+        </div>
+        <div id="tacticsDrawerBody" class="flex-1 overflow-y-auto p-5 space-y-5"></div>
+      </aside>
+    </div>
+  </div>
+
+<script>
+  // ---- Character roster (id -> display name / face image / embedded fallback global) ----
+  var CHARACTERS = [
+    // 上段 (8キャラ)
+    // tileZoom/tileX/tileY はタイル用の顔アップ表示補正(Visionで全身立ち絵を確認して算出)。
+    // zoom/x/y (既存) はキャラセレ画面の巨大立ち絵側の補正で、意味が異なるため両方保持する。
+    { id: 'pciel',    name: '完全武装シエル',       nameBreakJa: '完全武装<br>シエル', nameEn: 'Powered Ciel',             global: '__PCIEL_DATA__',    img: 'meltyblood_typelumina_powered_ciel.png', zoom: 1.3, x: 1, y: -14, tileZoom: 3.03, tileX: -2, tileY: 32 },
+    { id: 'maid',     name: '翡翠＆琥珀',          nameEn: 'Hisui & Kohaku',           global: '__MAID_DATA__',     img: 'meltyblood_typelumina_hisui_kohaku.png', zoom: 1.8, x: 1, y: -21, tileZoom: 2.8, tileX: 3, tileY: 29 },
+    { id: 'akiha',    name: '遠野秋葉',           nameEn: 'Akiha Tohno',              global: '__AKIHA_DATA__',    img: 'meltyblood_typelumina_akiha_tohno.png', zoom: 1.3, x: 0, y: -8, tileZoom: 3.5, tileX: -3, tileY: 35 },
+    { id: 'arcueid',  name: 'アルクェイド',        nameEn: 'Arcueid Brunestud',        global: '__ARUKU_DATA__',    img: 'meltyblood_typelumina_arcueid.png', zoom: 1.15, x: 0, y: 0, tileZoom: 2.29, tileX: 8, tileY: 25 },
+    { id: 'ciel',     name: 'シエル',             nameEn: 'Ciel',                     global: '__CIEL_DATA__',     img: 'meltyblood_typelumina_ciel.png', zoom: 1.5, x: 3, y: -16, tileZoom: 3.15, tileX: 8, tileY: 14 },
+    { id: 'noel',     name: 'ノエル',             nameEn: 'Noel',                     global: '__NOEL_DATA__',     img: 'meltyblood_typelumina_noel.png', zoom: 1.4, x: -3, y: -14, tileZoom: 3.38, tileX: 8, tileY: 23 },
+    { id: 'mario',    name: 'マーリオゥ・ジャッロ・ベスティーノ', nameBreakJa: 'マーリオゥ・<br>ジャッロ・ベスティーノ', longName: true, nameEn: 'Mario Gallo Bestino', global: '__MARIO_DATA__',  img: 'meltyblood_typelumina_mario_gallo_bestino.png', zoom: 1.2, x: -1, y: -17, tileZoom: 3.08, tileX: 12, tileY: 31 },
+    { id: 'warc',     name: '暴走アルクェイド',     nameEn: 'Red Arcueid',              global: '__WARC_DATA__',     img: 'meltyblood_typelumina_red_arcueid.png', zoom: 1.65, x: 1, y: -18, tileZoom: 3.2, tileX: -3, tileY: 33 },
+    // 中段 (8キャラ)
+    { id: 'kohaku',   name: '琥珀',               nameEn: 'Kohaku',                   global: '__KOHAKU_DATA__',   img: 'meltyblood_typelumina_kohaku.png', zoom: 1.85, x: -6, y: -14, tileZoom: 4, tileX: -9, tileY: 30 },
+    { id: 'miyako',   name: '有間都古',           nameEn: 'Miyako Arima',             global: '__MIYAKO_DATA__',   img: 'meltyblood_typelumina_miyako_arima.png', zoom: 1.0, x: 0, y: -10, tileZoom: 2.34, tileX: 0, tileY: 26 },
+    { id: 'kouma',    name: '軋間紅摩',           nameEn: 'Kouma Kishima',            global: '__KOUMA_DATA__',    img: 'meltyblood_typelumina_kouma_kishima.png', zoom: 1.66, x: 0, y: -18, tileZoom: 3.5, tileX: 8, tileY: 31 },
+    { id: 'shiki',    name: '遠野志貴',           nameEn: 'Shiki Tohno',              global: '__SHIKI_DATA__',    img: 'meltyblood_typelumina_shiki_tohno.png', zoom: 1.0, x: 0, y: 0, tileZoom: 2.13, tileX: 3, tileY: 22 },
+    { id: 'roa',      name: 'ミハイル・ロア・バルダムヨォン', nameBreakJa: 'ミハイル・ロア・<br>バルダムヨォン', longName: true, nameEn: 'Michael Roa Valdamjong', global: '__ROA_DATA__',      img: 'meltyblood_typelumina_roa.png', zoom: 1.35, x: -2, y: -13, tileZoom: 3, tileX: -12, tileY: 26 },
+    { id: 'vlov',     name: 'ヴローヴ・アルハンゲリ', nameBreakJa: 'ヴローヴ・<br>アルハンゲリ', nameEn: 'Vlov Arkhangel',         global: '__VLOV_DATA__',     img: 'meltyblood_typelumina_vlov.png', zoom: 1.72, x: 0, y: -20, tileZoom: 3.33, tileX: -3, tileY: 32 },
+    { id: 'dan',      name: '死徒ノエル',         nameEn: 'Dead Apostle Noel',        global: '__DAN_DATA__',      img: 'meltyblood_typelumina_dead_apostle_noel.png', zoom: 1.8, x: 0, y: -21, tileZoom: 3.08, tileX: 6, tileY: 25 },
+    { id: 'hisui',    name: '翡翠',               nameEn: 'Hisui',                    global: '__HISUI_DATA__',    img: 'meltyblood_typelumina_hisui.png', zoom: 1.8, x: 5, y: -19, tileZoom: 3.5, tileX: 17, tileY: 28 },
+    // 下段 (6キャラ)
+    { id: 'ushiwaka', name: '牛若丸',             nameEn: 'Ushiwakamaru',             global: '__USHIWAKA_DATA__', img: 'meltyblood_typelumina_ushiwakamaru.png', zoom: 1.85, x: -20, y: -24, tileZoom: 3.5, tileX: -14, tileY: 25 },
+    { id: 'neco',     name: 'ネコアルク',          nameEn: 'Neco-Arc',                 global: '__NECO_DATA__',     img: 'meltyblood_typelumina_neco_arc.png', zoom: 0.5, x: -1, y: -12, tileZoom: 2.0, tileX: 5, tileY: 14 },
+    { id: 'mash',     name: 'マシュ・キリエライト', nameEn: 'Mash Kyrielight',          global: '__MASH_DATA__',     img: 'meltyblood_typelumina_mash_kyrielight.png', zoom: 1.65, x: -10, y: -21, tileZoom: 5, tileX: -12, tileY: 8 },
+    { id: 'saber',    name: 'セイバー',           nameEn: 'Saber',                    global: '__SABER_DATA__',    img: 'meltyblood_typelumina_saber.png', zoom: 1.8, x: -7, y: -16, tileZoom: 4, tileX: -5, tileY: 17 },
+    { id: 'aoko',     name: '蒼崎青子',           nameEn: 'Aoko Aozaki',              global: '__AOKO_DATA__',     img: 'meltyblood_typelumina_aoko_aozaki.png', zoom: 1.6, x: 2, y: -17, tileZoom: 3.5, tileX: 8, tileY: 32 },
+    { id: 'monte',    name: '巌窟王',             nameEn: 'The Count of Monte Cristo', global: '__MONTE_DATA__',   img: 'meltyblood_typelumina_the_count_of_monte_cristo.png', zoom: 1.68, x: -10, y: -21, tileZoom: 3.5, tileX: -13, tileY: 36 }
+  ];
+  var MAX_HP = 12300; // 現行ロースター中の最大HP(軋間紅摩)を基準にHPバーの割合を算出
+  var CHAR_IMG_DIR = 'images/Characters/';
+
+  function findCharacter(id) {
+    for (var i = 0; i < CHARACTERS.length; i++) {
+      if (CHARACTERS[i].id === id) return CHARACTERS[i];
+    }
+    return null;
+  }
+
+  function charPortraitUrl(id) {
+    var meta = findCharacter(id);
+    return meta ? CHAR_IMG_DIR + meta.img : '';
+  }
+
+  // ---- Shared formatting helpers ----
+  function escapeHtml(str) {
+    return String(str == null ? '' : str).replace(/[&<>"']/g, function (ch) {
+      return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
+    });
+  }
+
+  function formatStartup(value) {
+    if (value === undefined || value === null || value === '' || value === '-') return '-';
+    var s = String(value).replace(/\n/g, ', ');
+    return /F$/i.test(s) ? s : s + 'F';
+  }
+
+  function classifyOnBlock(value) {
+    if (value === undefined || value === null || value === '' || value === '-' || /^n\/a$/i.test(String(value))) {
+      return { text: value == null || value === '' ? '-' : String(value), cls: 'bg-neutral-800 text-neutral-400 font-mono' };
+    }
+    var str = String(value);
+    var text = /F/i.test(str) ? str : str + 'F';
+    var match = str.match(/-?\d+/);
+    if (!match) {
+      return { text: text, cls: 'bg-neutral-800 text-neutral-400 font-mono' };
+    }
+    var n = parseInt(match[0], 10);
+    if (n >= 1) {
+      return { text: text, cls: 'bg-emerald-900/50 text-emerald-300 font-mono font-bold' };
+    } else if (n >= -4) {
+      return { text: text, cls: 'bg-neutral-800 text-yellow-200 font-mono' };
+    }
+    return { text: text, cls: 'bg-red-900/50 text-red-300 font-mono font-bold' };
+  }
+
+  var ATTRIBUTE_BADGE_CLASS = {
+    '上段': 'bg-sky-500/15 text-sky-300 border border-sky-500/40',
+    '中段': 'bg-fuchsia-500/15 text-fuchsia-300 border border-fuchsia-500/40',
+    '下段': 'bg-amber-500/15 text-amber-300 border border-amber-500/40',
+    '投げ': 'bg-purple-500/15 text-purple-300 border border-purple-500/40',
+    'ガード不能': 'bg-red-600/20 text-red-300 border border-red-500/60 font-bold'
+  };
+
+  function attributeBadgeHtml(attr) {
+    if (!attr || attr === '-') {
+      return '<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold font-mono bg-neutral-800 text-neutral-500 border border-neutral-700">-</span>';
+    }
+    var cls = ATTRIBUTE_BADGE_CLASS[attr] || 'bg-neutral-800 text-neutral-300 border border-neutral-700';
+    return '<span class="inline-block px-2 py-0.5 rounded-full text-[11px] font-bold font-mono ' + cls + '">' + escapeHtml(attr) + '</span>';
+  }
+
+  // ---- Command -> icon rendering (images/Input_ila/) ----
+  var COMMAND_ICON_DIR = 'images/Input_ila/';
+  var COMMAND_ICON_CLASS = 'inline-block h-4 w-4 sm:h-5 sm:w-5 align-middle mx-0.5 pointer-events-none select-none';
+  // 5(ニュートラル)は省略。テンキー表記の方向のみアイコン化する。
+  var COMMAND_DIRECTION_ICONS = {
+    '1': { file: '22px-UNI_Input_1.png', alt: '↙' },
+    '2': { file: '22px-UNI_Input_2.png', alt: '↓' },
+    '3': { file: '22px-UNI_Input_3.png', alt: '↘' },
+    '4': { file: '22px-UNI_Input_4.png', alt: '←' },
+    '6': { file: '22px-UNI_Input_6.png', alt: '→' }
+  };
+  var COMMAND_BUTTON_ICONS = {
+    'A': { file: '22px-MBTL_Input_A.png', alt: 'A' },
+    'B': { file: '22px-MBTL_Input_B.png', alt: 'B' },
+    'C': { file: '22px-MBTL_Input_C.png', alt: 'C' },
+    'D': { file: '22px-MBTL_Input_D.png', alt: 'D' },
+    'X': { file: '22px-UNI_Input_X.png', alt: 'ANY', title: '任意の攻撃ボタン (A/B/C)' }
+  };
+
+  function commandIconHtml(def) {
+    var titleAttr = def.title ? ' title="' + escapeHtml(def.title) + '"' : '';
+    return '<img src="' + COMMAND_ICON_DIR + def.file + '" alt="' + escapeHtml(def.alt) + '"' + titleAttr +
+      ' class="' + COMMAND_ICON_CLASS + '">';
+  }
+
+  // コマンド文字列を1文字ずつ解析し、方向/攻撃ボタンをアイコンに、
+  // "~" "/" "+" 等の記号やジャンプ接頭辞 "j"/"J" はインラインテキストに変換する。
+  // "[...]" は溜め(チャージ)入力として角括弧付きでラップする。
+  function renderCommandTokens(str) {
+    var len = str.length;
+    var i = 0;
+    var html = '';
+    var textBuf = '';
+    function flush() {
+      if (textBuf) {
+        html += '<span class="font-mono">' + escapeHtml(textBuf) + '</span>';
+        textBuf = '';
+      }
+    }
+    while (i < len) {
+      var ch = str[i];
+
+      // ジャンプ攻撃の接頭辞 "j"/"J"(任意で "." を伴う)は常に "j." として表示する
+      if (ch === 'j' || ch === 'J') {
+        textBuf += 'j.';
+        i += (str[i + 1] === '.') ? 2 : 1;
+        continue;
+      }
+
+      // "(...)" は注記(アシスト名/キャラ名等)としてそのままテキスト表示する
+      if (ch === '(') {
+        var closeP = str.indexOf(')', i + 1);
+        var end = closeP === -1 ? len : closeP + 1;
+        textBuf += str.slice(i, end);
+        i = end;
+        continue;
+      }
+
+      // "[...]" は溜め(チャージ)入力: 中身をアイコン化した上で角括弧表記で囲む
+      if (ch === '[') {
+        var closeB = str.indexOf(']', i + 1);
+        if (closeB === -1) { textBuf += ch; i++; continue; }
+        flush();
+        var inner = renderCommandTokens(str.slice(i + 1, closeB));
+        html += '<span class="inline-flex items-center align-middle mx-0.5" title="長押し(チャージ)">' +
+          '<span class="font-mono text-neutral-500">[</span>' + inner + '<span class="font-mono text-neutral-500">]</span></span>';
+        i = closeB + 1;
+        continue;
+      }
+
+      if (ch === '5') { i++; continue; } // ニュートラルは省略
+
+      if (COMMAND_DIRECTION_ICONS[ch]) {
+        flush();
+        html += commandIconHtml(COMMAND_DIRECTION_ICONS[ch]);
+        i++;
+        continue;
+      }
+
+      if (COMMAND_BUTTON_ICONS[ch]) {
+        flush();
+        html += commandIconHtml(COMMAND_BUTTON_ICONS[ch]);
+        i++;
+        continue;
+      }
+
+      textBuf += ch;
+      i++;
+    }
+    flush();
+    return html;
+  }
+
+  function renderCommandIcons(command) {
+    var str = String(command == null ? '' : command);
+    if (!str) return '';
+    // "rapid 1" 等は入力コマンドではなく技名ラベルなのでアイコン化せずそのまま表示する
+    if (/^rapid\b/i.test(str.trim())) {
+      return '<span class="font-mono font-bold">' + escapeHtml(str) + '</span>';
+    }
+    return renderCommandTokens(str);
+  }
+
+  // ---- Tactics notes (data/tactics-data.js) with a graceful fallback for
+  // characters that don't have an entry registered yet. ----
+  function getTacticsData(id) {
+    var table = window.__TACTICS_DATA__;
+    return (table && table[id]) || null;
+  }
+
+  // ---- Unified move-table rendering (used by both 1P and 2P sides) ----
+  // Only moves with a matching tactics note get a badge, a pointer cursor,
+  // and an accordion row at all — moves without one (5A, etc.) render as a
+  // plain, inert row so "has a note" vs "doesn't" reads at a glance.
+  function findTacticsNote(tacticsNotes, move) {
+    if (!tacticsNotes) return null;
+    // 元テキストの技名(nameJa/name)は必殺技の固有名(例: 黒鍵, ハイロゥ)で書かれて
+    // いることが多く、move.command(例: "236A")だけでは一致しないため両方見る。
+    var exact = tacticsNotes[move.command] || tacticsNotes[move.nameJa] || tacticsNotes[move.name];
+    if (exact) return exact;
+
+    var keys = Object.keys(tacticsNotes);
+    var candidates = [move.command, move.nameJa, move.name].filter(Boolean);
+
+    // 表記ゆれ("JC" vs "jC"/"j.C" 等)を、大文字小文字と"."を無視した比較で吸収する。
+    for (var i = 0; i < candidates.length; i++) {
+      var normalized = candidates[i].replace(/\./g, '').toLowerCase();
+      var hit = keys.find(function (k) { return k.replace(/\./g, '').toLowerCase() === normalized; });
+      if (hit) return tacticsNotes[hit];
+    }
+
+    // 技名の部分一致("黒鍵" という対策メモが「黒鍵投げ」「黒鍵・断罪」等の派生技
+    // すべてに当てはまるようなケース)。誤爆を避けるため、英数字だけの短いキー
+    // (2B, JC 等、既に上の完全一致/表記ゆれ吸収でカバー済み)は対象にせず、
+    // 漢字仮名を含む技名キーだけを対象にする。
+    var flavorKeys = keys.filter(function (k) { return k.length >= 2 && /[^\x00-\x7F]/.test(k); });
+    var nameCandidates = [move.nameJa, move.name].filter(Boolean);
+    var best = null;
+    nameCandidates.forEach(function (n) {
+      flavorKeys.forEach(function (k) {
+        if (n.indexOf(k) !== -1 && (!best || k.length > best.length)) best = k;
+      });
+    });
+    return best ? tacticsNotes[best] : null;
+  }
+
+  // ---- Hitbox images (data/hitbox-data.js) ----
+  // command が同じキャラ内で重複するケース(Vlov の炎/氷モード等)に対応するため、
+  // "command::name" の複合キー -> "command" 単体キーの順に参照する
+  // (生成側 scripts/buildHitboxMap.js も同じ優先順位でキーを書き出している)。
+  //
+  // 1コマンドにつき複数枚の画像(多段技の各段・派生技・BE版)がある場合に対応するため、
+  // 各エントリは常に配列([{ src, label? }, ...])で返す。
+  function lookupHitboxImages(charId, move) {
+    var charMap = window.__HITBOX_DATA__ && window.__HITBOX_DATA__[charId];
+    if (!charMap) return [];
+    var compositeKey = move.command + '::' + (move.name || '');
+    var entry = charMap[compositeKey] || charMap[move.command];
+    if (!entry) return [];
+    if (typeof entry === 'string') return [{ src: entry }]; // 旧形式(単一文字列)のフォールバック
+    return Array.isArray(entry) ? entry : [];
+  }
+
+  // ---- Hitbox image lightbox (click-to-zoom) ----
+  var hitboxLightboxEl = null;
+  function openHitboxLightbox(src, alt) {
+    if (!hitboxLightboxEl) {
+      hitboxLightboxEl = document.createElement('div');
+      hitboxLightboxEl.id = 'hitboxLightbox';
+      hitboxLightboxEl.className = 'fixed inset-0 z-[80] hidden items-center justify-center bg-black/85 p-6 cursor-zoom-out';
+      hitboxLightboxEl.innerHTML = '<img class="max-w-full max-h-full rounded shadow-2xl" alt="">';
+      hitboxLightboxEl.addEventListener('click', function () {
+        hitboxLightboxEl.classList.add('hidden');
+        hitboxLightboxEl.classList.remove('flex');
+      });
+      document.body.appendChild(hitboxLightboxEl);
+    }
+    var img = hitboxLightboxEl.querySelector('img');
+    img.src = src;
+    img.alt = alt || '';
+    hitboxLightboxEl.classList.remove('hidden');
+    hitboxLightboxEl.classList.add('flex');
+  }
+
+  function buildMoveRow(move, punishBadgeClass, tacticsNotes, charId) {
+    var note = findTacticsNote(tacticsNotes, move);
+    var hasNote = !!note;
+    var hitboxImages = lookupHitboxImages(charId, move);
+    var hasImage = hitboxImages.length > 0;
+    var hasAccordion = hasNote || hasImage;
+
+    var tr = document.createElement('tr');
+    tr.className = hasAccordion ? 'row cursor-pointer hover:bg-neutral-800/50 transition' : 'row cursor-default';
+
+    var badgeHtml = hasNote ? ' <span class="tactics-note-badge">💡対策あり</span>' : '';
+
+    var displayName = move.nameJa || (move.name && move.name !== move.command ? move.name : '');
+    var commandHtml =
+      '<div class="flex flex-wrap items-center gap-y-1" data-command="' + escapeHtml(move.command) + '">' +
+        renderCommandIcons(move.command) + badgeHtml +
+      '</div>' +
+      (displayName ? '<div class="text-[10px] text-neutral-500 mt-0.5">' + escapeHtml(displayName) + '</div>' : '');
+
+    var onBlockInfo = classifyOnBlock(move.onBlock);
+
+    var notesHtml = escapeHtml(move.notes || '');
+    if (move.isPunishable) {
+      notesHtml += ' <span class="punish-badge ml-1 inline-flex items-center gap-1 rounded-full ' + punishBadgeClass + ' px-2 py-0.5 text-[11px] font-bold">⚡ 確反あり</span>';
+    }
+
+    tr.innerHTML =
+      '<td class="px-3 py-2">' + commandHtml + '</td>' +
+      '<td class="px-3 py-2">' + escapeHtml(formatStartup(move.startup)) + '</td>' +
+      '<td class="px-3 py-2"><span class="inline-block px-2 py-0.5 rounded ' + onBlockInfo.cls + '">' + escapeHtml(onBlockInfo.text) + '</span></td>' +
+      '<td class="px-3 py-2">' + attributeBadgeHtml(move.attribute) + '</td>' +
+      '<td class="px-3 py-2 notes-cell text-neutral-400 break-words">' + notesHtml + '</td>';
+
+    var frag = document.createDocumentFragment();
+    frag.appendChild(tr);
+
+    // 対策メモも当たり判定画像も無い技はアコーディオン行そのものを作らない —
+    // display:none のトグルだけに頼ると、tr/tdの最小高さ分だけ中身がチラ見え
+    // する不具合があったため、そもそも存在しない行にしてしまうのが最も確実。
+    if (!hasAccordion) return frag;
+
+    var accordionTr = document.createElement('tr');
+    accordionTr.className = 'accordion-row hidden';
+    var moveLabel = move.nameJa || move.name || move.command;
+    var titleHtml = hasNote
+      ? '💡 対' + escapeHtml(moveLabel) + ' 攻略アドバイス'
+      : '🎯 ' + escapeHtml(moveLabel) + ' 当たり判定';
+
+    // 左カラム: 当たり判定画像 (無ければ何も描画しない = 右カラムが自動で全幅になる)。
+    // 1枚だけの技は従来通り中央に大きく、2枚以上(多段技/派生技/BE版など)は
+    // ラベル付きサムネイルを並べて表示する(各画像は個別にライトボックスで拡大可能)。
+    var imageColHtml = '';
+    if (hasImage && hitboxImages.length === 1) {
+      var onlyImg = hitboxImages[0];
+      imageColHtml =
+        '<div class="w-full md:w-[38%] md:shrink-0 bg-black/60 border border-neutral-800 rounded p-2 flex flex-col items-center justify-center gap-1.5">' +
+          '<img src="' + escapeHtml(onlyImg.src) + '" alt="' + escapeHtml(moveLabel) + ' 当たり判定画像" loading="lazy" data-hitbox-idx="0" ' +
+            'class="hitbox-image max-h-40 md:max-h-48 w-auto max-w-full object-contain cursor-zoom-in transition-transform duration-150 hover:scale-110">' +
+          '<p class="text-[10px] text-neutral-500 text-center leading-tight">🔴赤: 攻撃判定 ／ 🟢緑: 喰らい判定</p>' +
+        '</div>';
+    } else if (hasImage) {
+      var thumbsHtml = hitboxImages.map(function (img, idx) {
+        var labelHtml = img.label
+          ? '<span class="text-[9px] font-bold text-amber-300/90 tracking-wide whitespace-nowrap">' + escapeHtml(img.label) + '</span>'
+          : '';
+        var altText = moveLabel + (img.label ? ' ' + img.label : '') + ' 当たり判定画像';
+        return '<div class="flex flex-col items-center gap-1">' +
+          labelHtml +
+          '<img src="' + escapeHtml(img.src) + '" alt="' + escapeHtml(altText) + '" loading="lazy" data-hitbox-idx="' + idx + '" ' +
+            'class="hitbox-image max-h-24 sm:max-h-28 md:max-h-32 w-auto max-w-full object-contain cursor-zoom-in transition-transform duration-150 hover:scale-110 rounded border border-neutral-800/80">' +
+        '</div>';
+      }).join('');
+      imageColHtml =
+        '<div class="w-full md:w-[46%] md:shrink-0 bg-black/60 border border-neutral-800 rounded p-2 flex flex-col items-center gap-1.5">' +
+          '<div class="flex flex-wrap items-start justify-center gap-2.5">' + thumbsHtml + '</div>' +
+          '<p class="text-[10px] text-neutral-500 text-center leading-tight">🔴赤: 攻撃判定 ／ 🟢緑: 喰らい判定</p>' +
+        '</div>';
+    }
+
+    // 右カラム: 対策メモ (無ければ空 = 画像だけのカードになる)
+    var textColHtml = hasNote
+      ? '<div class="flex-1 min-w-0"><p class="text-neutral-200 text-xs sm:text-sm leading-relaxed whitespace-pre-wrap">' + escapeHtml(note) + '</p></div>'
+      : '';
+
+    accordionTr.innerHTML =
+      '<td colspan="5" class="p-0 border-0">' +
+        '<div class="tactics-accordion-card bg-neutral-900/90 border-l-4 border-amber-500/70 rounded-r-lg p-3.5 my-1 mx-2 shadow-inner">' +
+          '<div class="flex items-start justify-between gap-2">' +
+            '<p class="text-amber-300 font-bold text-xs">' + titleHtml + '</p>' +
+            '<button type="button" class="tactics-accordion-close">▲ 閉じる</button>' +
+          '</div>' +
+          '<div class="mt-1.5 flex flex-col md:flex-row gap-3 items-start">' +
+            imageColHtml + textColHtml +
+          '</div>' +
+        '</div>' +
+      '</td>';
+
+    var cardEl = accordionTr.querySelector('.tactics-accordion-card');
+
+    if (hasImage) {
+      accordionTr.querySelectorAll('.hitbox-image').forEach(function (el) {
+        var idx = parseInt(el.getAttribute('data-hitbox-idx'), 10) || 0;
+        var img = hitboxImages[idx];
+        el.addEventListener('click', function (e) {
+          e.stopPropagation();
+          openHitboxLightbox(img.src, moveLabel + (img.label ? ' ' + img.label : '') + ' 当たり判定画像');
+        });
+      });
+    }
+
+    function setExpanded(open) {
+      if (open) {
+        cardEl.style.opacity = '0';
+        accordionTr.classList.remove('hidden');
+        requestAnimationFrame(function () { cardEl.style.opacity = '1'; });
+      } else {
+        accordionTr.classList.add('hidden');
+      }
+      tr.classList.toggle('is-expanded', open);
+    }
+
+    tr.addEventListener('click', function () {
+      setExpanded(accordionTr.classList.contains('hidden'));
+    });
+    accordionTr.querySelector('.tactics-accordion-close').addEventListener('click', function (e) {
+      e.stopPropagation();
+      setExpanded(false);
+    });
+
+    frag.appendChild(accordionTr);
+    return frag;
+  }
+
+  // isRival は現在バッジ表示には使っていない(対策メモの有無だけで判別する)が、
+  // YOU/RIVAL視点トグル側の呼び出しシグネチャに合わせて引数は受け取っておく。
+  function renderMoves(tbodyId, data, punishBadgeClass, charId, isRival) {
+    var tbody = document.getElementById(tbodyId);
+    if (!tbody) return;
+    if (!data || !Array.isArray(data.moves) || data.moves.length === 0) {
+      tbody.innerHTML = '<tr class="row"><td colspan="5" class="px-3 py-4 text-center text-red-400">技データを読み込めませんでした。</td></tr>';
+      applySearchFilter();
+      return;
+    }
+    var tactics = getTacticsData(charId);
+    var tacticsNotes = tactics ? tactics.moveNotes : null;
+    var frag = document.createDocumentFragment();
+    data.moves.forEach(function (move) {
+      frag.appendChild(buildMoveRow(move, punishBadgeClass, tacticsNotes, charId));
+    });
+    tbody.innerHTML = '';
+    tbody.appendChild(frag);
+    applySearchFilter();
+  }
+
+  // ---- Data loading with json fetch -> embedded *-data.js fallback ----
+  function loadCharacterData(id) {
+    var meta = findCharacter(id);
+    return fetch('data/' + id + '.json', { cache: 'no-store' })
+      .then(function (res) {
+        if (!res.ok) throw new Error('HTTP ' + res.status);
+        return res.json();
+      })
+      .catch(function (err) {
+        var fallback = meta && window[meta.global];
+        if (fallback) {
+          console.warn(id + '.json の fetch に失敗したため、埋め込みデータ(' + id + '-data.js)を使用します。', err);
+          return fallback;
+        }
+        console.error(id + 'の技データを読み込めませんでした。', err);
+        return null;
+      });
+  }
+
+  // ---- Slot (1P/2P) definitions ----
+  var SLOTS = {
+    p1: {
+      tbodyId: 'p1Tbody',
+      nameEl: document.getElementById('p1Name'),
+      nameEnEl: document.getElementById('p1NameEn'),
+      typeEl: document.getElementById('p1Type'),
+      healthEl: document.getElementById('p1HealthNum'),
+      hpFillEl: document.getElementById('p1HpFill'),
+      portraitEl: document.getElementById('p1Portrait'),
+      csPortraitImgEl: document.getElementById('csP1PortraitImg'),
+      csNameJaEl: document.getElementById('csP1NameJa'),
+      csNameEnEl: document.getElementById('csP1NameEn'),
+      // 1P側の確反バッジは2P(aruku)カラーで表示
+      punishBadgeClass: 'bg-aruku-500/15 text-aruku-300 border border-aruku-500/40',
+      currentId: null
+    },
+    p2: {
+      tbodyId: 'p2Tbody',
+      nameEl: document.getElementById('p2Name'),
+      nameEnEl: document.getElementById('p2NameEn'),
+      typeEl: document.getElementById('p2Type'),
+      healthEl: document.getElementById('p2HealthNum'),
+      hpFillEl: document.getElementById('p2HpFill'),
+      portraitEl: document.getElementById('p2Portrait'),
+      csPortraitImgEl: document.getElementById('csP2PortraitImg'),
+      csNameJaEl: document.getElementById('csP2NameJa'),
+      csNameEnEl: document.getElementById('csP2NameEn'),
+      // 2P側の確反バッジは1P(shiki)カラーで表示
+      punishBadgeClass: 'bg-shiki-500/15 text-shiki-300 border border-shiki-500/40',
+      currentId: null
+    }
+  };
+
+  // ---- YOU / RIVAL perspective toggle ----
+  // MBTL の座席（1P/2P）はどちらで戦うか状況次第で変わるため、「1P=自分」に
+  // 固定せず中央のトグルで視点を反転できるようにする。役割は表示上のラベル・
+  // 対策バッジの出し先を切り替えるだけで、1P/2P自体の座席仕様(スプライト優先度
+  // 等)には影響しない。
+  var perspectiveFlipped = false; // false: 1P=YOU/2P=RIVAL(既定), true: 1P=RIVAL/2P=YOU
+  var ROLE_BADGE_CLASS = {
+    you: 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider bg-sky-500/15 text-sky-300 border border-sky-500/40',
+    rival: 'inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-black tracking-wider bg-red-500/15 text-red-300 border border-red-500/40'
+  };
+
+  function getRole(slotKey) {
+    var isP1 = slotKey === 'p1';
+    if (isP1) return perspectiveFlipped ? 'rival' : 'you';
+    return perspectiveFlipped ? 'you' : 'rival';
+  }
+  function isSlotRival(slotKey) { return getRole(slotKey) === 'rival'; }
+
+  function updateRoleBadges() {
+    ['p1', 'p2'].forEach(function (slotKey) {
+      var role = getRole(slotKey);
+      var badge = document.getElementById(slotKey + 'RoleBadge');
+      if (badge) {
+        badge.textContent = role === 'you' ? 'YOU' : 'RIVAL';
+        badge.className = (slotKey === 'p1' ? 'ml-1.5 ' : 'mr-1.5 ') + ROLE_BADGE_CLASS[role];
+      }
+    });
+    document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+      btn.classList.toggle('is-flipped', perspectiveFlipped);
+    });
+  }
+
+  function togglePerspective() {
+    perspectiveFlipped = !perspectiveFlipped;
+    updateRoleBadges();
+    // Re-render both tables so the ★警戒 badge follows whichever side is now RIVAL.
+    ['p1', 'p2'].forEach(function (slotKey) {
+      var slot = SLOTS[slotKey];
+      if (slot && slot.data) {
+        renderMoves(slot.tbodyId, slot.data, slot.punishBadgeClass, slot.currentId, isSlotRival(slotKey));
+      }
+    });
+  }
+
+  document.querySelectorAll('.view-toggle-btn').forEach(function (btn) {
+    btn.addEventListener('click', togglePerspective);
+  });
+
+  function updateHeaderTitle() {
+    var p1Name = SLOTS.p1.nameEl.textContent || '';
+    var p2Name = SLOTS.p2.nameEl.textContent || '';
+    var titleEl = document.getElementById('pageTitle');
+    var subtitleEl = document.getElementById('headerSubtitle');
+    if (p1Name && p2Name) {
+      if (titleEl) titleEl.textContent = 'MBTL対戦ダッシュボード | ' + p1Name + ' vs ' + p2Name;
+      if (subtitleEl) subtitleEl.textContent = '対戦特化型ダッシュボード — ' + p1Name + ' vs ' + p2Name;
+    }
+  }
+
+  // ---- Character-select confirm panel (shown once both 1P/2P are chosen) ----
+  function updateConfirmPanel() {
+    var panel = document.getElementById('csConfirmPanel');
+    var p1Id = SLOTS.p1.currentId, p2Id = SLOTS.p2.currentId;
+    if (p1Id && p2Id) {
+      var p1Meta = findCharacter(p1Id);
+      var p2Meta = findCharacter(p2Id);
+      document.getElementById('csConfirmP1Name').textContent = p1Meta ? p1Meta.name : '';
+      document.getElementById('csConfirmP2Name').textContent = p2Meta ? p2Meta.name : '';
+      panel.classList.remove('hidden');
+    } else {
+      panel.classList.add('hidden');
+    }
+  }
+
+  function switchCharacter(slotKey, id) {
+    var slot = SLOTS[slotKey];
+    if (!slot) return;
+    slot.currentId = id;
+    var meta = findCharacter(id);
+
+    // キャラごとの立ち絵スケール/位置補正(武器の有無等による見た目サイズのばらつきを吸収)
+    var pScale = meta && typeof meta.zoom === 'number' ? meta.zoom : 1;
+    var pX = meta && typeof meta.x === 'number' ? meta.x : 0;
+    var pY = meta && typeof meta.y === 'number' ? meta.y : 0;
+
+    // 画像はJSONの読み込みを待たず即時に切り替える(見た目のレスポンス優先)
+    if (slot.portraitEl) {
+      slot.portraitEl.src = charPortraitUrl(id);
+      slot.portraitEl.alt = meta ? meta.name : '';
+      slot.portraitEl.style.setProperty('--p-scale', pScale);
+      slot.portraitEl.style.setProperty('--p-x', pX + '%');
+      slot.portraitEl.style.setProperty('--p-y', pY + '%');
+    }
+    if (slot.csPortraitImgEl) {
+      slot.csPortraitImgEl.src = charPortraitUrl(id);
+      slot.csPortraitImgEl.alt = meta ? meta.name : '';
+      slot.csPortraitImgEl.classList.add('is-loaded');
+      slot.csPortraitImgEl.style.setProperty('--p-scale', pScale);
+      slot.csPortraitImgEl.style.setProperty('--p-x', pX + '%');
+      slot.csPortraitImgEl.style.setProperty('--p-y', pY + '%');
+    }
+    if (slot.csNameJaEl) {
+      // 長い名前は nameBreakJa(あらかじめ決めた<br>位置)を優先し、単語の途中で
+      // 1文字だけ折り返るのを防ぐ。指定がないキャラは通常通りテキストのみ表示する。
+      slot.csNameJaEl.innerHTML = meta ? (meta.nameBreakJa || escapeHtml(meta.name)) : '';
+      slot.csNameJaEl.classList.toggle('is-long-name', !!(meta && meta.longName));
+    }
+    if (slot.csNameEnEl) slot.csNameEnEl.textContent = meta ? meta.nameEn.toUpperCase() : '';
+
+    updateGridSelectionUI();
+    updateConfirmPanel();
+
+    renderMoves(slot.tbodyId, null, slot.punishBadgeClass, id, isSlotRival(slotKey));
+    var tbody = document.getElementById(slot.tbodyId);
+    if (tbody) tbody.innerHTML = '<tr class="row"><td colspan="5" class="px-3 py-4 text-center text-neutral-500">読み込み中…</td></tr>';
+
+    loadCharacterData(id).then(function (data) {
+      // ユーザーが読み込み中に別キャラへ切り替えていた場合は古い結果を破棄する
+      if (slot.currentId !== id) return;
+      slot.data = data; // 視点反転トグル時に再フェッチなしで再描画するためキャッシュ
+
+      var displayName = (data && data.name) || (meta && meta.name) || '';
+      var displayNameEn = (data && data.nameEn) || (meta && meta.nameEn) || '';
+
+      slot.nameEl.textContent = displayName;
+      slot.nameEnEl.textContent = displayNameEn.toUpperCase();
+      slot.typeEl.textContent = (data && data.type) || '';
+
+      var health = data && typeof data.health === 'number' ? data.health : null;
+      slot.healthEl.textContent = health != null ? health : '-';
+      var pct = health != null ? Math.max(0, Math.min(100, (health / MAX_HP) * 100)) : 0;
+      requestAnimationFrame(function () {
+        setTimeout(function () { slot.hpFillEl.style.width = pct.toFixed(2) + '%'; }, 150);
+      });
+
+      renderMoves(slot.tbodyId, data, slot.punishBadgeClass, id, isSlotRival(slotKey));
+      updateHeaderTitle();
+    });
+  }
+
+  // ---- Search filter (shared across both tables, re-applied after every render) ----
+  var searchInput = document.getElementById('searchInput');
+  function applySearchFilter() {
+    var q = searchInput.value.trim().toLowerCase();
+    document.querySelectorAll('.frame-table tbody tr.row').forEach(function (row) {
+      // コマンドはアイコン化されテキストを持たないため、data-command属性に保持した
+      // 元のコマンド文字列(例: "236X~X")をテキスト内容と合わせて検索対象にする
+      var cmdEl = row.querySelector('[data-command]');
+      var commandRaw = cmdEl ? cmdEl.getAttribute('data-command') : '';
+      var text = (commandRaw + ' ' + row.textContent).toLowerCase();
+      var visible = text.includes(q);
+      row.style.display = visible ? '' : 'none';
+      // 技行が検索で隠れる時は、開いていたアコーディオンも畳んで隠す。
+      // 再表示された時は直前の開閉状態(hiddenクラスの有無)をそのまま維持する。
+      var accordionRow = row.nextElementSibling;
+      if (!visible && accordionRow && accordionRow.classList.contains('accordion-row')) {
+        accordionRow.classList.add('hidden');
+        row.classList.remove('is-expanded');
+      }
+    });
+  }
+  searchInput.addEventListener('input', applySearchFilter);
+
+  // ---- Confirmed-punish highlight toggle ----
+  var toggleBtn = document.getElementById('toggleHighlight');
+  var stateLabel = document.getElementById('highlightState');
+  toggleBtn.addEventListener('click', function () {
+    var active = document.body.classList.toggle('highlight-mode');
+    stateLabel.textContent = active ? 'ON' : 'OFF';
+    toggleBtn.classList.toggle('bg-red-500/30', active);
+  });
+
+  // ==========================================================================
+  // Full-screen Character Select Grid (MBTL-style select screen, hex tiles)
+  // ==========================================================================
+  var activePickSlot = 'p1';
+  var csPickP1Btn = document.getElementById('csPickP1Btn');
+  var csPickP2Btn = document.getElementById('csPickP2Btn');
+  var csCharGrid = document.getElementById('csCharGrid');
+  var SVG_NS = 'http://www.w3.org/2000/svg';
+  // Corner-clipped hexagons, matching the CSS clip-paths on .cs-tile-clip exactly.
+  // Left half: top-right/bottom-left cut. Right half: mirrored (top-left/bottom-right
+  // cut), so the honeycomb structure is symmetric about the grid's center.
+  var TILE_HEX_POINTS_LEFT = '85,0 0,0 0,85 15,100 100,100 100,15';
+  var TILE_HEX_POINTS_RIGHT = '15,0 100,0 100,85 85,100 0,100 0,15';
+
+  function updatePickSlotUI() {
+    csPickP1Btn.classList.toggle('active', activePickSlot === 'p1');
+    csPickP2Btn.classList.toggle('active', activePickSlot === 'p2');
+  }
+
+  csPickP1Btn.addEventListener('click', function () {
+    activePickSlot = 'p1';
+    updatePickSlotUI();
+  });
+  csPickP2Btn.addEventListener('click', function () {
+    activePickSlot = 'p2';
+    updatePickSlotUI();
+  });
+  updatePickSlotUI();
+
+  function buildCsCharTile(meta, isRightHalf) {
+    var btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'cs-tile focus:outline-none' + (isRightHalf ? ' is-right-half' : '');
+    btn.dataset.id = meta.id;
+    btn.title = meta.name + '（' + meta.nameEn + '）';
+    var hexPoints = isRightHalf ? TILE_HEX_POINTS_RIGHT : TILE_HEX_POINTS_LEFT;
+
+    // Hex-clipped content layer: portrait image + label + P1/P2 badge.
+    var clip = document.createElement('div');
+    clip.className = 'cs-tile-clip';
+
+    var imgWrap = document.createElement('div');
+    imgWrap.className = 'cs-tile-img-wrap';
+    var img = document.createElement('img');
+    img.src = CHAR_IMG_DIR + meta.img;
+    img.alt = meta.name;
+    img.loading = 'lazy';
+    img.onerror = function () { img.style.visibility = 'hidden'; };
+    // タイル内で顔〜バストアップが大きく見えるようにキャラごとのズーム/位置補正を適用
+    var tZoom = typeof meta.tileZoom === 'number' ? meta.tileZoom : 1;
+    var tX = typeof meta.tileX === 'number' ? meta.tileX : 0;
+    var tY = typeof meta.tileY === 'number' ? meta.tileY : 0;
+    img.style.transform = 'scale(' + tZoom + ') translate(' + tX + '%, ' + tY + '%)';
+    imgWrap.appendChild(img);
+
+    var label = document.createElement('span');
+    label.className = 'cs-tile-label';
+    label.textContent = meta.name;
+
+    var p1Badge = document.createElement('span');
+    p1Badge.className = 'cs-tile-badge p1-badge hidden';
+    p1Badge.textContent = '1P';
+
+    var p2Badge = document.createElement('span');
+    p2Badge.className = 'cs-tile-badge p2-badge hidden';
+    p2Badge.textContent = '2P';
+
+    clip.appendChild(imgWrap);
+    clip.appendChild(label);
+    clip.appendChild(p1Badge);
+    clip.appendChild(p2Badge);
+
+    // Unclipped SVG overlays: a faint static hex outline, plus a glowing hex
+    // cursor outline that only lights up once this tile becomes 1P/2P.
+    var outlineSvg = document.createElementNS(SVG_NS, 'svg');
+    outlineSvg.setAttribute('viewBox', '0 0 100 100');
+    outlineSvg.setAttribute('preserveAspectRatio', 'none');
+    outlineSvg.setAttribute('class', 'cs-tile-outline');
+    var outlinePoly = document.createElementNS(SVG_NS, 'polygon');
+    outlinePoly.setAttribute('points', hexPoints);
+    outlinePoly.setAttribute('class', 'cs-tile-outline-poly');
+    outlineSvg.appendChild(outlinePoly);
+
+    var cursorSvg = document.createElementNS(SVG_NS, 'svg');
+    cursorSvg.setAttribute('viewBox', '0 0 100 100');
+    cursorSvg.setAttribute('preserveAspectRatio', 'none');
+    cursorSvg.setAttribute('class', 'cs-tile-cursor');
+    var cursorPoly = document.createElementNS(SVG_NS, 'polygon');
+    cursorPoly.setAttribute('points', hexPoints);
+    cursorPoly.setAttribute('class', 'cs-tile-cursor-poly');
+    cursorSvg.appendChild(cursorPoly);
+
+    btn.appendChild(clip);
+    btn.appendChild(outlineSvg);
+    btn.appendChild(cursorSvg);
+
+    btn.addEventListener('click', function () {
+      switchCharacter(activePickSlot, meta.id);
+    });
+
+    return btn;
+  }
+
+  // MBTL風に「上段8・中段8・下段6」の3段に分割し、V字型(中央が凹む)のオフセットを付けて配置する
+  var CHAR_ROW_SIZES = [8, 8, 6];
+
+  // 各行の並びに応じた --v-offset(px)。両端ほど浮き上がり、中央ほど深く沈む(V字)。
+  var V_OFFSET_TABLES = {
+    8: [0, 18, 36, 54, 54, 36, 18, 0],
+    6: [18, 36, 54, 54, 36, 18]
+  };
+
+  function getVOffset(count, index) {
+    var table = V_OFFSET_TABLES[count];
+    return table && table[index] != null ? table[index] : 0;
+  }
+
+  function buildCsCharGrid() {
+    var offset = 0;
+    CHAR_ROW_SIZES.forEach(function (count) {
+      var rowChars = CHARACTERS.slice(offset, offset + count);
+      offset += count;
+
+      var row = document.createElement('div');
+      row.className = 'cs-row';
+      rowChars.forEach(function (meta, index) {
+        // 行の後半(右側)は六角形の切り欠きを反転し、ハニカム構造を中央基準の対称にする
+        var isRightHalf = index >= count / 2;
+        var tile = buildCsCharTile(meta, isRightHalf);
+        tile.style.setProperty('--v-offset', getVOffset(count, index) + 'px');
+        // 左右の切り欠きが切り替わる中央の継ぎ目だけ、あと4pxだけ余白を足す
+        if (index === count / 2 - 1) {
+          tile.style.marginRight = '4px';
+        }
+        row.appendChild(tile);
+      });
+      csCharGrid.appendChild(row);
+    });
+  }
+
+  function updateGridSelectionUI() {
+    var tiles = csCharGrid.querySelectorAll('.cs-tile');
+    tiles.forEach(function (tile) {
+      var id = tile.dataset.id;
+      var isP1 = SLOTS.p1.currentId === id;
+      var isP2 = SLOTS.p2.currentId === id;
+      tile.classList.toggle('is-p1', isP1);
+      tile.classList.toggle('is-p2', isP2);
+      tile.querySelector('.p1-badge').classList.toggle('hidden', !isP1);
+      tile.querySelector('.p2-badge').classList.toggle('hidden', !isP2);
+    });
+  }
+
+  // ==========================================================================
+  // Screen flow: Character Select <-> Dashboard, via a 3-phase "Mystic Eyes of
+  // Death Perception" shatter transition:
+  //   Phase 1 — white/blue slicing lines flash across a dimmed screen
+  //   Phase 2 — those lines instantly turn lethal red
+  //   Phase 3 — the convex cells the lines carve out fly apart (gravity ignored)
+  // ==========================================================================
+  var charSelectScreen = document.getElementById('charSelectScreen');
+  var dashboardScreen = document.getElementById('dashboardScreen');
+
+  function showDashboardScreen() {
+    dashboardScreen.classList.remove('hidden');
+    playDashboardEntrance();
+  }
+
+  // ---- VERSUS entrance: panel slide-in + VS badge slam + HP re-fill ----
+  // Runs every time the dashboard is (re)shown, so classes are reset up front
+  // (rather than assumed absent) to guarantee the animation replays on repeat
+  // visits via "キャラクター選択へ戻る" -> 決定.
+  function playDashboardEntrance() {
+    var p1Panel = document.getElementById('p1Panel');
+    var p2Panel = document.getElementById('p2Panel');
+    var vsBadge = document.getElementById('vsBadgeDesktop');
+    var panels = [p1Panel, p2Panel].filter(Boolean);
+
+    // Snapshot each HP bar's real target width, then drop it to 0% with
+    // transitions suspended so the reset itself doesn't animate.
+    var hpBars = [SLOTS.p1, SLOTS.p2]
+      .map(function (slot) { return slot.hpFillEl; })
+      .filter(Boolean)
+      .map(function (el) {
+        var target = el.style.width || '0%';
+        el.style.transition = 'none';
+        el.style.width = '0%';
+        return { el: el, target: target };
+      });
+
+    // Reset to the pre-entrance pose.
+    panels.forEach(function (el) { el.classList.remove('panel-pre-enter'); });
+    if (vsBadge) vsBadge.classList.remove('vs-pre-enter', 'vs-slam');
+    panels.forEach(function (el) { el.classList.add('panel-pre-enter'); });
+    if (vsBadge) vsBadge.classList.add('vs-pre-enter');
+
+    // Force a reflow so the browser paints the pre-enter/0% pose before the
+    // classes below flip it back — otherwise the two changes can get
+    // coalesced into a single paint and the transition never plays.
+    void dashboardScreen.offsetWidth;
+
+    requestAnimationFrame(function () {
+      // Panels slide in and the VS badge zooms down together — the impact.
+      panels.forEach(function (el) { el.classList.remove('panel-pre-enter'); });
+      if (vsBadge) vsBadge.classList.remove('vs-pre-enter');
+
+      // VS badge lands at .3s: burst its glow.
+      setTimeout(function () {
+        if (!vsBadge) return;
+        vsBadge.classList.add('vs-slam');
+        setTimeout(function () { vsBadge.classList.remove('vs-slam'); }, 500);
+      }, 300);
+
+      // Panels land at .35s: re-fire the HP bars up to their real values.
+      setTimeout(function () {
+        hpBars.forEach(function (bar) {
+          bar.el.style.transition = 'width .9s cubic-bezier(0.22, 1, 0.36, 1)';
+          bar.el.style.width = bar.target;
+        });
+      }, 350);
+    });
+  }
+
+  function showCharSelectScreen() {
+    charSelectScreen.style.display = '';
+    dashboardScreen.classList.add('hidden');
+  }
+
+  // ---- Geometry: fixed full-screen chord layout + convex-hull cell extraction ----
+  // A set of straight chords across a rectangle always partitions it into
+  // convex cells, so a low-res canvas flood-fill followed by a convex hull of
+  // each region's pixels reconstructs the true polygon of every cell.
+  //
+  // This exact layout is traced from the reference "Mystic Eyes of Death
+  // Perception" 17-way split screenshots (images/ClaudeCode制作用参考資料フォルダ/
+  // 17分割した瞬間.jpg, 17分割した後.jpg): diagonals fanning from the top/bottom
+  // edges plus a converging burst of lines on the right side. It's a single
+  // fixed pattern (not randomized) so the split always looks the same,
+  // deliberate way every time the transition plays.
+  var SHATTER_LINE_LAYOUT = [
+    [[45.5, 100], [100, 23.0]],
+    [[0, 98.75], [52.5, 0]],
+    [[27.8, 0], [64.12, 100]],
+    [[2.73, 0], [31.42, 100]],
+    [[2.1, 100], [22.6, 0]],
+    [[40, 100], [70.2, 0]],
+    [[76.9, 100], [75.44, 0]],
+    [[76, 0], [100, 66]],
+    [[71, 100], [100, 75]]
+  ];
+
+  function convexHull(points) {
+    var pts = points.slice().sort(function (a, b) { return a.x - b.x || a.y - b.y; });
+    function cross(o, a, b) { return (a.x - o.x) * (b.y - o.y) - (a.y - o.y) * (b.x - o.x); }
+    var lower = [];
+    for (var i = 0; i < pts.length; i++) {
+      while (lower.length >= 2 && cross(lower[lower.length - 2], lower[lower.length - 1], pts[i]) <= 0) lower.pop();
+      lower.push(pts[i]);
+    }
+    var upper = [];
+    for (var j = pts.length - 1; j >= 0; j--) {
+      while (upper.length >= 2 && cross(upper[upper.length - 2], upper[upper.length - 1], pts[j]) <= 0) upper.pop();
+      upper.push(pts[j]);
+    }
+    lower.pop();
+    upper.pop();
+    return lower.concat(upper);
+  }
+
+  function computeRegions(lines) {
+    var W = 240, H = 135;
+    var canvas = document.createElement('canvas');
+    canvas.width = W;
+    canvas.height = H;
+    var ctx = canvas.getContext('2d');
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, H);
+    ctx.strokeStyle = '#000';
+    ctx.lineWidth = 2;
+    ctx.lineCap = 'round';
+    lines.forEach(function (line) {
+      ctx.beginPath();
+      ctx.moveTo(line[0].x / 100 * W, line[0].y / 100 * H);
+      ctx.lineTo(line[1].x / 100 * W, line[1].y / 100 * H);
+      ctx.stroke();
+    });
+
+    var data = ctx.getImageData(0, 0, W, H).data;
+    var labels = new Int32Array(W * H).fill(-1);
+    var regions = [];
+    var isWall = function (idx) { return data[idx * 4] < 128; };
+
+    for (var y = 0; y < H; y++) {
+      for (var x = 0; x < W; x++) {
+        var startIdx = y * W + x;
+        if (labels[startIdx] !== -1 || isWall(startIdx)) continue;
+        var label = regions.length;
+        var queue = [startIdx];
+        labels[startIdx] = label;
+        var pts = [];
+        var qi = 0;
+        while (qi < queue.length) {
+          var cur = queue[qi++];
+          var cx = cur % W, cy = (cur / W) | 0;
+          pts.push({ x: cx, y: cy });
+          var cand = [[cx - 1, cy], [cx + 1, cy], [cx, cy - 1], [cx, cy + 1]];
+          for (var n = 0; n < 4; n++) {
+            var nx = cand[n][0], ny = cand[n][1];
+            if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+            var nIdx = ny * W + nx;
+            if (labels[nIdx] !== -1 || isWall(nIdx)) continue;
+            labels[nIdx] = label;
+            queue.push(nIdx);
+          }
+        }
+        regions.push(pts);
+      }
+    }
+
+    var minSize = W * H * 0.002;
+    var valid = regions.filter(function (r) { return r.length >= minSize; });
+    return { regions: valid, W: W, H: H };
+  }
+
+  function generateShardLayout() {
+    var lines = SHATTER_LINE_LAYOUT.map(function (l) {
+      return [{ x: l[0][0], y: l[0][1] }, { x: l[1][0], y: l[1][1] }];
+    });
+    var result = computeRegions(lines);
+    var polys = result.regions.map(function (pts) {
+      var pct = pts.map(function (p) { return { x: p.x / result.W * 100, y: p.y / result.H * 100 }; });
+      var sample = pct;
+      if (sample.length > 700) {
+        var step = Math.ceil(sample.length / 700);
+        sample = sample.filter(function (_, i) { return i % step === 0; });
+      }
+      return convexHull(sample);
+    });
+    return { lines: lines, polys: polys };
+  }
+
+  // ---- Blood spurt: a short-lived <canvas> particle burst fired from every
+  // cut line the instant it turns lethal. Runs its own rAF loop and always
+  // tears itself down (cancelAnimationFrame + canvas.remove()) either when
+  // the burst naturally finishes or when the caller invokes the returned
+  // cleanup function, so nothing outlives the transition. ----
+  var BLOOD_COLORS = ['#ff0033', '#d40027', '#8b0000', '#ff2d55'];
+
+  function spawnBloodSpray(overlay, lines, durationMs) {
+    var canvas = document.createElement('canvas');
+    canvas.className = 'shatter-blood-canvas';
+    var dpr = Math.min(window.devicePixelRatio || 1, 2);
+    var w = window.innerWidth, h = window.innerHeight;
+    canvas.width = Math.round(w * dpr);
+    canvas.height = Math.round(h * dpr);
+    overlay.appendChild(canvas);
+    var ctx = canvas.getContext('2d');
+    ctx.scale(dpr, dpr);
+
+    // Seed a burst of particles perpendicular to each cut line (both sides),
+    // with a little jitter so it reads as a spray rather than two neat fans.
+    var particles = [];
+    lines.forEach(function (line) {
+      var x1 = line[0].x / 100 * w, y1 = line[0].y / 100 * h;
+      var x2 = line[1].x / 100 * w, y2 = line[1].y / 100 * h;
+      var dx = x2 - x1, dy = y2 - y1;
+      var len = Math.hypot(dx, dy) || 1;
+      var nx = -dy / len, ny = dx / len;
+      var count = 8 + Math.floor(Math.random() * 5);
+      for (var i = 0; i < count; i++) {
+        var t = Math.random();
+        var ox = x1 + dx * t, oy = y1 + dy * t;
+        var side = Math.random() < 0.5 ? 1 : -1;
+        var baseDirX = nx * side, baseDirY = ny * side;
+        var jitter = (Math.random() * 2 - 1) * 0.85;
+        var cosT = Math.cos(jitter), sinT = Math.sin(jitter);
+        var dirX = baseDirX * cosT - baseDirY * sinT;
+        var dirY = baseDirX * sinT + baseDirY * cosT;
+        var speed = 7 + Math.random() * 15;
+        particles.push({
+          x: ox, y: oy,
+          vx: dirX * speed, vy: dirY * speed,
+          life: 1, decay: 0.018 + Math.random() * 0.02,
+          size: 1.4 + Math.random() * 2.8,
+          color: BLOOD_COLORS[(Math.random() * BLOOD_COLORS.length) | 0],
+          streak: Math.random() < 0.65
+        });
+      }
+    });
+
+    var rafId = null;
+    var start = performance.now();
+    var done = false;
+
+    function stop() {
+      if (done) return;
+      done = true;
+      if (rafId != null) cancelAnimationFrame(rafId);
+      canvas.remove();
+    }
+
+    function frame(now) {
+      ctx.clearRect(0, 0, w, h);
+      particles.forEach(function (p) {
+        if (p.life <= 0) return;
+        p.x += p.vx;
+        p.y += p.vy;
+        p.vx *= 0.93;
+        p.vy = p.vy * 0.93 + 0.4; // light gravity arcs the spray downward
+        p.life -= p.decay;
+        if (p.life <= 0) return;
+        ctx.globalAlpha = Math.max(0, p.life);
+        ctx.fillStyle = p.color;
+        if (p.streak) {
+          ctx.strokeStyle = p.color;
+          ctx.lineWidth = p.size;
+          ctx.lineCap = 'round';
+          ctx.beginPath();
+          ctx.moveTo(p.x, p.y);
+          ctx.lineTo(p.x - p.vx * 0.8, p.y - p.vy * 0.8);
+          ctx.stroke();
+        } else {
+          ctx.beginPath();
+          ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      });
+      ctx.globalAlpha = 1;
+      if (now - start < durationMs) {
+        rafId = requestAnimationFrame(frame);
+      } else {
+        stop();
+      }
+    }
+    rafId = requestAnimationFrame(frame);
+
+    return stop;
+  }
+
+  // 17 flying shards each carry a full clone of charSelectScreen, so any
+  // infinite/looping CSS animation or blur filter inside it runs 17x over
+  // during the 3D transform — the main cause of the shatter's frame drops.
+  // None of it is visible mid-flight, so it's cut from each clone up front.
+  var SHATTER_HEAVY_SELECTOR = '.cs-tile-cursor, .cs-portrait-ring-2, .cs-hud-time, .cs-glow-left, .cs-glow-right, .cs-confirm-panel';
+
+  function freezeHeavyClonedAnimations(clone) {
+    var heavyEls = clone.querySelectorAll(SHATTER_HEAVY_SELECTOR);
+    for (var i = 0; i < heavyEls.length; i++) {
+      heavyEls[i].style.setProperty('animation', 'none', 'important');
+      heavyEls[i].style.setProperty('filter', 'none', 'important');
+    }
+  }
+
+  function playShatterTransition() {
+    var layout = generateShardLayout();
+
+    var overlay = document.createElement('div');
+    overlay.id = 'shatterOverlay';
+
+    // ---- Phase 3 shards (built first, but kept fully hidden until the break
+    // itself — otherwise the hairline gaps between adjacent clip-path
+    // polygons show through as a "cracked" screen before any line has even
+    // run). The real charSelectScreen stays visible and untouched underneath
+    // for all of Phase 1/2, so only the dim + slicing lines sit on top of it. ----
+    var piecesWrap = document.createElement('div');
+    piecesWrap.className = 'shatter-pieces';
+    piecesWrap.style.visibility = 'hidden';
+    var pieceEls = layout.polys.map(function (poly) {
+      var piece = document.createElement('div');
+      piece.className = 'shatter-piece';
+      piece.style.clipPath = 'polygon(' + poly.map(function (p) { return p.x + '% ' + p.y + '%'; }).join(', ') + ')';
+
+      var cx = poly.reduce(function (s, p) { return s + p.x; }, 0) / poly.length;
+      var cy = poly.reduce(function (s, p) { return s + p.y; }, 0) / poly.length;
+      var dx = cx - 50, dy = cy - 50;
+      // Still used for Step A's small pop below, even though Step B no
+      // longer launches radially outward from it.
+      var baseAngle = Math.atan2(dy, dx) + (Math.random() * 2 - 1) * 0.6;
+
+      // Step B "崩落": gravity, not an explosion — mostly straight down, a
+      // little sideways jostle, leaning toward the camera as it topples.
+      var flyX = (Math.random() * 2 - 1) * 12;  // vw, slight sideways jostle while falling
+      var flyY = 70 + Math.random() * 60;       // vh, always down
+      var flyZ = 50 + Math.random() * 150;      // px, leans toward the camera as it goes
+      var rotX = 30 + Math.random() * 40;       // deg, bows forward like a toppling pane of glass
+      var rotY = (Math.random() * 2 - 1) * 10;  // deg, only a faint twist — a big yaw would read as tumbling, not falling
+      var rotZ = (Math.random() * 2 - 1) * 25;  // deg, slight side-to-side lean as it drops
+      piece.style.setProperty('--fly-x', flyX.toFixed(1) + 'vw');
+      piece.style.setProperty('--fly-y', flyY.toFixed(1) + 'vh');
+      piece.style.setProperty('--fly-z', flyZ.toFixed(0) + 'px');
+      piece.style.setProperty('--rot-x', rotX.toFixed(1) + 'deg');
+      piece.style.setProperty('--rot-y', rotY.toFixed(1) + 'deg');
+      piece.style.setProperty('--rot-z', rotZ.toFixed(1) + 'deg');
+
+      // Step A "パリン": a small radial nudge (plus a lift toward the camera
+      // and a per-piece brightness tweak) — just enough to read as glass
+      // popping apart in place, before Step B lets gravity take over.
+      var crackPower = 8 + Math.random() * 8;
+      piece.style.setProperty('--crack-x', (Math.cos(baseAngle) * crackPower).toFixed(1) + 'px');
+      piece.style.setProperty('--crack-y', (Math.sin(baseAngle) * crackPower).toFixed(1) + 'px');
+      piece.style.setProperty('--crack-z', (6 + Math.random() * 8).toFixed(1) + 'px');
+      piece.style.setProperty('--crack-brightness', (0.9 + Math.random() * 0.25).toFixed(2));
+
+      // Step A stays a tight, near-simultaneous "バリンッ" burst, but Step B
+      // cascades top-to-bottom (by cy) with a little extra jitter, so the 17
+      // pieces crash down like a chain-reaction collapse rather than at once.
+      piece.style.setProperty('--crack-delay', (Math.random() * 40).toFixed(0) + 'ms');
+      piece.style.setProperty('--fall-delay', ((cy / 100) * 100 + Math.random() * 40).toFixed(0) + 'ms');
+
+      var clone = charSelectScreen.cloneNode(true);
+      clone.removeAttribute('id');
+      freezeHeavyClonedAnimations(clone);
+      piece.appendChild(clone);
+      piecesWrap.appendChild(piece);
+      return piece;
+    });
+    overlay.appendChild(piecesWrap);
+
+    // ---- Dim backdrop (phase 1/2) ----
+    var dim = document.createElement('div');
+    dim.className = 'shatter-dim';
+    overlay.appendChild(dim);
+
+    // ---- Phase 1/2 slicing lines (white-blue -> red) ----
+    var svg = document.createElementNS(SVG_NS, 'svg');
+    svg.setAttribute('viewBox', '0 0 100 100');
+    svg.setAttribute('preserveAspectRatio', 'none');
+    svg.setAttribute('class', 'shatter-lines-svg');
+    // viewBox is 0 0 100 100 but preserveAspectRatio="none" stretches it to the
+    // viewport's actual (non-square) aspect ratio. vector-effect:non-scaling-stroke
+    // resolves stroke-dasharray/stroke-dashoffset in that stretched screen-pixel
+    // space rather than viewBox units, so the dash length must be computed from
+    // real on-screen pixels (not raw viewBox coordinates) or the line repeats as
+    // a dashed pattern instead of drawing in as one solid stroke.
+    var scaleX = window.innerWidth / 100;
+    var scaleY = window.innerHeight / 100;
+    var lineEls = layout.lines.map(function (line) {
+      var el = document.createElementNS(SVG_NS, 'line');
+      el.setAttribute('x1', line[0].x);
+      el.setAttribute('y1', line[0].y);
+      el.setAttribute('x2', line[1].x);
+      el.setAttribute('y2', line[1].y);
+      el.setAttribute('vector-effect', 'non-scaling-stroke');
+      el.setAttribute('class', 'shatter-line');
+      var lenPx = Math.hypot((line[1].x - line[0].x) * scaleX, (line[1].y - line[0].y) * scaleY);
+      el.style.strokeDasharray = String(lenPx);
+      el.style.strokeDashoffset = String(lenPx);
+      svg.appendChild(el);
+      return el;
+    });
+    overlay.appendChild(svg);
+
+    // ---- Red strobe, punched the instant the cut goes lethal (phase 2 -> 3) ----
+    var bloodFlash = document.createElement('div');
+    bloodFlash.className = 'shatter-blood-flash';
+    overlay.appendChild(bloodFlash);
+
+    // ---- Whiteout flash, punched in just before Phase 3 finishes ----
+    var flash = document.createElement('div');
+    flash.id = 'shatterFlash';
+    overlay.appendChild(flash);
+
+    document.body.appendChild(overlay);
+    // charSelectScreen itself stays visible through Phase 1/2 — it only gets
+    // swapped out for the shard mosaic at the moment of the break (Step A below).
+
+    // Tracks the blood-spray canvas's own teardown fn so it can always be
+    // force-stopped (cancelAnimationFrame + remove()) even if the transition
+    // is cut short, instead of relying solely on its internal timer.
+    var stopBloodSpray = null;
+
+    // ---- Timeline (ms from transition start) ----
+    // A knife cuts one line at a time, not all nine at once — LINE_INTERVAL_MS
+    // staggers each line's own ~35ms flash-draw (see .shatter-line's
+    // stroke-dashoffset transition) so all nine land sequentially by ~800ms,
+    // each with its own tiny camera kick. Then a short held silence before
+    // the cut flashes lethal red, a freeze on that red "死線" so it actually
+    // registers, and only then does the glass give way — first a quick
+    // Step A "パリン" pop-apart-in-place (see .crack-open), then Step B where
+    // the shards actually let go and tumble off screen (see .fly).
+    var LINE_DRAW_MS = 35;        // each line's own near-instant flash-draw
+    var LINE_INTERVAL_MS = 95;    // stagger between successive line starts (85-100ms band; 9 lines -> ~800ms)
+    var HOLD_SILENT_MS = 155;     // held silence once every line has landed
+    var HOLD_DEATH_MS = 400;      // held red "死線" (タメ) before it breaks
+    var STEP_A_MS = 150;          // パリン: pieces pop apart in place
+    var STEP_B_MS = 1000;         // 吹き飛び: pieces tumble away in 3D
+
+    var linesFinishAt = (lineEls.length - 1) * LINE_INTERVAL_MS + LINE_DRAW_MS;
+    var DEATH_DELAY_MS = linesFinishAt + HOLD_SILENT_MS;
+    var BREAK_DELAY_MS = DEATH_DELAY_MS + HOLD_DEATH_MS;   // Step A starts
+    var FLY_DELAY_MS = BREAK_DELAY_MS + STEP_A_MS;         // Step B starts
+    var BLOOD_SPRAY_MS = 800;                              // synced to Step B
+    var FLASH_DELAY_MS = FLY_DELAY_MS + STEP_B_MS - 150;   // near the tail of the shard flight
+    var HANDOFF_DELAY_MS = FLY_DELAY_MS + STEP_B_MS + 50;  // hand off to the dashboard entrance
+
+    // Phase 1: dim in, then slice the screen one line at a time.
+    requestAnimationFrame(function () {
+      dim.classList.add('active');
+      lineEls.forEach(function (el, i) {
+        setTimeout(function () {
+          el.style.strokeDashoffset = '0';
+        }, i * LINE_INTERVAL_MS);
+      });
+    });
+
+    // Phase 2: after every line has landed and held a beat, the cut turns lethal red.
+    setTimeout(function () {
+      svg.classList.add('is-death');
+    }, DEATH_DELAY_MS);
+
+    // Step A: the cut goes lethal and the screen actually breaks — the real
+    // screen is swapped out for the shard mosaic in this same instant (so the
+    // clip-path hairlines only ever appear *after* the break), and pieces pop
+    // apart just a few px in place (with a per-piece brightness shift) so the
+    // "パリンッ" moment itself is visible before anything flies anywhere.
+    setTimeout(function () {
+      charSelectScreen.style.visibility = 'hidden';
+      piecesWrap.style.visibility = '';
+      dim.classList.remove('active');
+      svg.classList.add('fade-out');
+      pieceEls.forEach(function (piece) { piece.classList.add('crack-open'); });
+    }, BREAK_DELAY_MS);
+
+    // Step B: blood sprays out and the glass-carved shards let go for real,
+    // tumbling away in 3D (gravity still ignored for the shards themselves).
+    setTimeout(function () {
+      bloodFlash.classList.add('flash');
+      stopBloodSpray = spawnBloodSpray(overlay, layout.lines, BLOOD_SPRAY_MS);
+      pieceEls.forEach(function (piece) {
+        piece.classList.remove('crack-open');
+        piece.classList.add('fly');
+      });
+    }, FLY_DELAY_MS);
+
+    // Near the tail of the shard flight, blow the whole screen out white for
+    // an instant — the "impact flash" cut into the dashboard reveal.
+    setTimeout(function () {
+      flash.classList.add('flash');
+    }, FLASH_DELAY_MS);
+
+    setTimeout(function () {
+      charSelectScreen.style.display = 'none';
+      charSelectScreen.style.visibility = '';
+      if (stopBloodSpray) stopBloodSpray(); // safety net: force-stop+remove the blood canvas if it hasn't already
+      overlay.remove();
+      showDashboardScreen();
+    }, HANDOFF_DELAY_MS);
+  }
+
+  document.getElementById('csConfirmBtn').addEventListener('click', function () {
+    if (!(SLOTS.p1.currentId && SLOTS.p2.currentId)) return;
+    playShatterTransition();
+  });
+
+  document.getElementById('backToSelectBtn').addEventListener('click', function () {
+    showCharSelectScreen();
+  });
+
+  // ==========================================================================
+  // 対策メモ ドロワー（1P/2P共通・押された側のキャラの内容に差し替えて表示）
+  // ==========================================================================
+  var tacticsDrawerOverlay = document.getElementById('tacticsDrawerOverlay');
+  var tacticsDrawerNameEl = document.getElementById('tacticsDrawerName');
+  var tacticsDrawerBodyEl = document.getElementById('tacticsDrawerBody');
+
+  function openTacticsDrawer(slotKey) {
+    var slot = SLOTS[slotKey];
+    if (!slot) return;
+    var meta = findCharacter(slot.currentId);
+    var tactics = getTacticsData(slot.currentId);
+
+    tacticsDrawerNameEl.textContent = meta ? meta.name : '';
+
+    if (!tactics) {
+      tacticsDrawerBodyEl.innerHTML =
+        '<p class="text-sm text-neutral-500 leading-relaxed">このキャラクターの対策メモはまだ登録されていません。</p>';
+    } else {
+      // keyPoints はデータ生成スクリプトのバージョン差(文字列配列 or {label,desc}
+      // 配列)があり得るため、どちらの形でも崩れずに表示できるよう防御的に読む。
+      var keyPointsHtml = (tactics.keyPoints || []).map(function (kp) {
+        var isString = typeof kp === 'string';
+        var label = isString ? kp : (kp && kp.label) || '';
+        var desc = isString ? '' : (kp && kp.desc) || '';
+        if (!label) return '';
+        return '<li class="tactics-keypoint">' +
+          '<span class="text-[11px] font-bold tracking-wide text-amber-400">' + escapeHtml(label) + '</span>' +
+          (desc ? '<span class="text-sm text-neutral-300 leading-snug">' + escapeHtml(desc) + '</span>' : '') +
+          '</li>';
+      }).filter(Boolean).join('');
+
+      // 技別詳細対策: rawText の全文ベタ貼りをやめ、moveNotes を技ごとのカードに
+      // 分けて表示する。Wikiの個別対策ページのように、目的の技をスクロールで
+      // すぐ探せるようにするのが狙い。
+      var moveNotesHtml = Object.keys(tactics.moveNotes || {}).map(function (title) {
+        var noteBody = tactics.moveNotes[title];
+        if (!noteBody) return '';
+        return '<div class="rounded-lg border border-neutral-800 bg-neutral-900/50 p-3">' +
+          '<h5 class="text-[11px] font-bold tracking-wide text-amber-400 mb-1">○ ' + escapeHtml(title) + '</h5>' +
+          '<p class="text-sm text-neutral-300 leading-relaxed whitespace-pre-wrap">' + escapeHtml(noteBody) + '</p>' +
+          '</div>';
+      }).filter(Boolean).join('');
+
+      tacticsDrawerBodyEl.innerHTML =
+        '<section>' +
+          '<h4 class="text-xs font-bold tracking-widest text-neutral-500 mb-1.5">概要</h4>' +
+          '<p class="text-sm text-neutral-200 leading-relaxed">' + escapeHtml(tactics.summary || '') + '</p>' +
+        '</section>' +
+        (keyPointsHtml
+          ? '<section class="mt-5"><h4 class="text-xs font-bold tracking-widest text-neutral-500 mb-1.5">重要ポイント</h4>' +
+            '<ul class="tactics-keypoint-list">' + keyPointsHtml + '</ul></section>'
+          : '') +
+        (moveNotesHtml
+          ? '<section class="mt-5"><h4 class="text-xs font-bold tracking-widest text-neutral-500 mb-1.5">技別詳細対策</h4>' +
+            '<div class="flex flex-col gap-2.5">' + moveNotesHtml + '</div></section>'
+          : '') +
+        (tactics.rawText
+          ? '<section class="mt-5 pt-4 border-t border-neutral-800">' +
+            '<details>' +
+              '<summary class="cursor-pointer text-xs font-bold tracking-widest text-neutral-500 hover:text-neutral-300 select-none">元テキスト全文を表示</summary>' +
+              '<p class="mt-2 text-xs text-neutral-500 leading-relaxed whitespace-pre-wrap">' + escapeHtml(tactics.rawText) + '</p>' +
+            '</details>' +
+            '</section>'
+          : '');
+    }
+
+    tacticsDrawerOverlay.classList.add('is-open');
+  }
+
+  function closeTacticsDrawer() {
+    tacticsDrawerOverlay.classList.remove('is-open');
+  }
+
+  document.getElementById('p1TacticsBtn').addEventListener('click', function () { openTacticsDrawer('p1'); });
+  document.getElementById('p2TacticsBtn').addEventListener('click', function () { openTacticsDrawer('p2'); });
+  document.getElementById('tacticsDrawerCloseBtn').addEventListener('click', closeTacticsDrawer);
+  document.getElementById('tacticsDrawerBackdrop').addEventListener('click', closeTacticsDrawer);
+  document.addEventListener('keydown', function (e) {
+    if (e.key === 'Escape' && tacticsDrawerOverlay.classList.contains('is-open')) closeTacticsDrawer();
+  });
+
+  // ---- Initial load ----
+  buildCsCharGrid();
+  switchCharacter('p1', 'arcueid');
+  switchCharacter('p2', 'ciel');
+  updateRoleBadges();
+</script>
+</body>
+</html>

@@ -1,24 +1,15 @@
-# build output
-dist/
-# generated types
-.astro/
+# OS / editor junk
+.DS_Store
+Thumbs.db
+.vscode/
 
-# dependencies
+# In case any future script gains npm dependencies
 node_modules/
 
-# logs
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-pnpm-debug.log*
-
-
-# environment variables
-.env
-.env.production
-
-# macOS-specific files
-.DS_Store
-
-# jetbrains setting folder
-.idea/
+# Development-only reference material (not used by the site itself).
+# Kept locally for provenance/rework; excluded from the repo due to size
+# and because it's scraped/screenshotted third-party material.
+/images/Command_Lists/
+/images/ClaudeCode制作用参考資料フォルダ/
+/raw_data/
+/Game＿System/
