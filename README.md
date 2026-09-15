@@ -47,4 +47,4 @@ scripts/
 
 ## 権利表記について
 
-本ツールは個人のファン制作物であり、『MELTY BLOOD: TYPE LUMINA』の開発・運営元とは一切関係ありません。作中キャラクターの名称・画像等の著作権は © TYPE-MOON / Project LUMINA / FRENCH-BREAD に帰属します。フレームデータ等の一部情報は [Mizuumi Wiki](https://mizuumi.wiki/w/Melty_Blood/MBTL) を参照しています。
+本ツールは個人のファン制作物であり、『MELTY BLOOD: TYPE LUMINA』の開発・運営元とは一切関係ありません。作中キャラクターの名称・画像等の著作権は © TYPE-MOON / Project LUMINA / FRENCH-BREAD に帰属します。
